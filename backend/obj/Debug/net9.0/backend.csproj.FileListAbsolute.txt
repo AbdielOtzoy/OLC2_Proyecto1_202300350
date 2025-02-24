@@ -31,3 +31,5 @@
 /home/abdielo/dev/compi2/proyecto1/backend/obj/Debug/net9.0/backend.pdb
 /home/abdielo/dev/compi2/proyecto1/backend/obj/Debug/net9.0/backend.genruntimeconfig.cache
 /home/abdielo/dev/compi2/proyecto1/backend/obj/Debug/net9.0/ref/backend.dll
+/home/abdielo/dev/compi2/proyecto1/backend/bin/Debug/net9.0/Antlr4.Runtime.Standard.dll
+/home/abdielo/dev/compi2/proyecto1/backend/obj/Debug/net9.0/backend.sourcelink.json
