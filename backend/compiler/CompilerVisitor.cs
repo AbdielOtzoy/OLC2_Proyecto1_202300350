@@ -21,9 +21,23 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     public override ValueWrapper VisitVarDeclaration(LanguageParser.VarDeclarationContext context)
     {
         string name = context.ID().GetText();
+        // si no tiene valor asignado, se le asigna un valor por defecto segun el tipo
+        if(context.expr() == null)
+        {
+            string type = context.TYPE().GetText();
+            ValueWrapper inferValue = type switch
+            {
+                "int" => new IntValueWrapper(0),
+                "float64" => new FloatValueWrapper(0),
+                "string" => new StringValueWrapper(""),
+                "bool" => new BoolValueWrapper(false),
+                "rune" => new RuneValueWrapper(' '),
+                _ => throw new Exception("Invalid type")
+            };
+            env.Declare(name, inferValue);
+            return defaultValue;
+        } 
         ValueWrapper value = Visit(context.expr());
-        //string type = context.TYPE().GetText();
-        // TODO: Check type
         env.Declare(name, value);
         return defaultValue;
     }
@@ -45,11 +59,11 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             ValueWrapper value = Visit(expr);
             output += value switch
                 {
-                    IntValueWrapper intValue => intValue.Value.ToString(),
-                    FloatValueWrapper floatValue => floatValue.Value.ToString(),
-                    StringValueWrapper stringValue => stringValue.Value,
-                    BoolValueWrapper boolValue => boolValue.Value.ToString(),
-                    RuneValueWrapper runeValue => runeValue.Value.ToString(),
+                    IntValueWrapper intValue => intValue.Value.ToString() + " ",
+                    FloatValueWrapper floatValue => floatValue.Value.ToString() + " ",
+                    StringValueWrapper stringValue => stringValue.Value + " ",
+                    BoolValueWrapper boolValue => boolValue.Value.ToString() + " ",
+                    RuneValueWrapper runeValue => runeValue.Value.ToString() + " ",
                     _ => throw new Exception("Invalid value")
                 };
         }
@@ -73,6 +87,77 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         env = prevEnv;
         return defaultValue;
     }
+
+    // VisitIfStmt
+    public override ValueWrapper VisitIfStmt(LanguageParser.IfStmtContext context)
+    {
+        ValueWrapper condition = Visit(context.expr());
+        if (condition is BoolValueWrapper boolValue)
+        {
+            if (boolValue.Value)
+            {
+                Visit(context.statement(0));
+            }
+            else if (context.statement().Length > 1)
+            {
+                Visit(context.statement(1));
+            }
+        }
+        else
+        {
+            throw new Exception("Invalid condition");
+        }
+        return defaultValue;
+    }
+
+        // VisitSwitchStmt
+    public override ValueWrapper VisitSwitchStmt(LanguageParser.SwitchStmtContext context)
+    {
+        ValueWrapper switchValue = Visit(context.expr());
+        bool caseMatched = false;
+
+        foreach (var caseClause in context.caseClauseStmt())
+        {
+            if (caseClause is LanguageParser.CaseClauseContext caseClauseStmt)
+            {
+                ValueWrapper caseValue = Visit(caseClauseStmt.expr());
+                if (switchValue.Equals(caseValue))
+                {
+                    caseMatched = true;
+                    foreach (var declaration in caseClauseStmt.declaration())
+                    {
+                        Visit(declaration);
+                    }
+                    break; 
+                }
+            }
+            else if (caseClause is LanguageParser.DefaultClauseContext defaultContext)
+            {
+                if (!caseMatched)
+                {
+                    foreach (var declaration in defaultContext.declaration())
+                    {
+                        Visit(declaration);
+                    }
+                }
+            }
+        }
+
+        return defaultValue;
+    }
+
+    // VisitCaseClause
+    public override ValueWrapper VisitCaseClause(LanguageParser.CaseClauseContext context)
+    {
+        return defaultValue;
+    }
+
+    // VisitDefaultClause
+    public override ValueWrapper VisitDefaultClause(LanguageParser.DefaultClauseContext context)
+    {
+        return defaultValue;
+    }
+    
 
     // VisitNegate 
     public override ValueWrapper VisitNegate(LanguageParser.NegateContext context)
@@ -250,11 +335,21 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     // VisitAssign
     public override ValueWrapper VisitAssign(LanguageParser.AssignContext context)
     {
-        string name = context.ID().GetText();
-        ValueWrapper value = Visit(context.expr());
-        env.Assign(name, value);
-        return defaultValue;
+        ValueWrapper value = Visit(context.expr(1));
+
+        if (context.expr(0) is LanguageParser.AssignContext leftAssign)
+        {
+            value = VisitAssign(leftAssign);
+        }
+        else
+        {
+            string name = context.expr(0).GetText();
+            env.Assign(name, value);
+        }
+
+        return value; 
     }
+
 
     // VisitString
     public override ValueWrapper VisitString(LanguageParser.StringContext context)

@@ -72,6 +72,34 @@ public interface ILanguageVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitBlockStmt([NotNull] LanguageParser.BlockStmtContext context);
 	/// <summary>
+	/// Visit a parse tree produced by the <c>IfStmt</c>
+	/// labeled alternative in <see cref="LanguageParser.statement"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitIfStmt([NotNull] LanguageParser.IfStmtContext context);
+	/// <summary>
+	/// Visit a parse tree produced by the <c>SwitchStmt</c>
+	/// labeled alternative in <see cref="LanguageParser.statement"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitSwitchStmt([NotNull] LanguageParser.SwitchStmtContext context);
+	/// <summary>
+	/// Visit a parse tree produced by the <c>CaseClause</c>
+	/// labeled alternative in <see cref="LanguageParser.caseClauseStmt"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitCaseClause([NotNull] LanguageParser.CaseClauseContext context);
+	/// <summary>
+	/// Visit a parse tree produced by the <c>DefaultClause</c>
+	/// labeled alternative in <see cref="LanguageParser.caseClauseStmt"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitDefaultClause([NotNull] LanguageParser.DefaultClauseContext context);
+	/// <summary>
 	/// Visit a parse tree produced by <see cref="LanguageParser.exprList"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>

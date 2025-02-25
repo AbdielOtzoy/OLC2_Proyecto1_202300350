@@ -9,8 +9,12 @@ varDeclaration: 'var' ID TYPE ('=' expr)?
 
 statement: expr # ExprStmt
     | 'fmt.Println' '(' exprList ')' # PrintStmt
-    | '{' declaration* '}' # BlockStmt;
+    | '{' declaration* '}' # BlockStmt
+    | 'if' '(' expr ')' statement ('else' statement)? # IfStmt
+    | 'switch' '(' expr ')' '{' caseClauseStmt* '}' # SwitchStmt;  
 
+caseClauseStmt: 'case' expr ':' declaration*  # CaseClause
+    | 'default' ':' declaration*          # DefaultClause;
 exprList: expr (',' expr)*;
 
 expr:
@@ -29,7 +33,7 @@ expr:
     | expr op = ('>' | '<' | '>=' | '<=') expr # Relational
     | expr op = ('==' | '!=') expr          # Equality
     | expr op = ('&&' | '||') expr          # Logical
-    | ID '=' expr                           # Assign
+    | expr '=' expr                           # Assign
     | ID '+=' expr                          # AddAssign
     | ID '-=' expr                          # SubAssign;
 
