@@ -42,6 +42,37 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         return defaultValue;
     }
 
+    // VisitSlicesDeclaration
+    public override ValueWrapper VisitSlicesDeclaration(LanguageParser.SlicesDeclarationContext context)
+    {
+        string name = context.ID().GetText();
+
+        // Verificar si la variable ya existe
+        if (env.Exists(name))
+        {
+            throw new SemanticError($"Variable {name} already declared", context.Start);
+        }
+
+        // Inicializar el array
+        ValueWrapper[] values = new ValueWrapper[context.exprList()?.expr().Length ?? 0];
+
+        // Llenar el array con los valores
+        if (context.exprList() != null)
+        {
+            for (int i = 0; i < context.exprList().expr().Length; i++)
+            {
+                values[i] = Visit(context.exprList().expr(i));
+                Console.WriteLine("Valor: " + values[i]);
+            }
+        }
+
+        // Declarar la variable en el entorno
+        env.Declare(name, new ArrayValueWrapper(values), context.Start);
+
+        return defaultValue;
+    }
+    
+
     // VisitExprStmt
     public override ValueWrapper VisitExprStmt(LanguageParser.ExprStmtContext context)
     {
@@ -278,6 +309,123 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     {
         string name = context.ID().GetText();
         return env.Get(name, context.Start);
+    }
+
+    // VisitIndex
+    public override ValueWrapper VisitIndex(LanguageParser.IndexContext context)
+    {
+        string name = context.ID().GetText();
+        ValueWrapper index = Visit(context.expr());
+
+        if (index is not IntValueWrapper intValue)
+        {
+            throw new SemanticError("Array index must be an integer", context.Start);
+        }
+
+        return env.Get(name, intValue.Value, context.Start);
+    }
+
+    // VisitIndexMethod
+    public override ValueWrapper VisitIndexMethod(LanguageParser.IndexMethodContext context)
+    {
+        Console.WriteLine("IndexMethod");
+        string name = context.ID().GetText();
+        ValueWrapper value = Visit(context.expr());
+        // Get the slice and find the value and if exists return the index
+        if (value is IntValueWrapper intValue)
+        {
+            var slices = env.Get(name, context.Start);
+            // find the value in the slice
+            if (slices is ArrayValueWrapper array)
+            {
+                for (int i = 0; i < array.Value.Length; i++)
+                {
+                    if (array.Value[i] is IntValueWrapper intWrapper && intWrapper.Value == intValue.Value)
+                    {
+                        return new IntValueWrapper(i);
+                    }
+                }
+            }
+            throw new SemanticError("Value not found in slice", context.Start);
+        }
+        else
+        {
+            throw new SemanticError("Array index must be an integer", context.Start);
+        }
+        
+    }
+
+    // VisitJoinMethod
+    public override ValueWrapper VisitJoinMethod(LanguageParser.JoinMethodContext context)
+    {
+        string name = context.ID().GetText();
+        ValueWrapper value = Visit(context.expr());
+        if (value is StringValueWrapper stringValue)
+        {
+            var slices = env.Get(name, context.Start);
+            if (slices is ArrayValueWrapper array)
+            {
+                string result = "";
+                foreach (var item in array.Value)
+                {
+                    if (item is StringValueWrapper stringWrapper)
+                    {
+                        result += stringWrapper.Value + stringValue.Value;
+                    }
+                    else
+                    {
+                        throw new SemanticError("Invalid value in slice", context.Start);
+                    }
+                }
+                return new StringValueWrapper(result);
+            }
+            else
+            {
+                throw new SemanticError("Variable is not a slice", context.Start);
+            }
+        }
+        else
+        {
+            throw new SemanticError("Value must be a string", context.Start);
+        }
+    }
+
+    // VisitLenMethod
+    public override ValueWrapper VisitLenMethod(LanguageParser.LenMethodContext context)
+    {
+        string name = context.ID().GetText();
+        var slices = env.Get(name, context.Start);
+        if (slices is ArrayValueWrapper array)
+        {
+            return new IntValueWrapper(array.Value.Length);
+        }
+        else
+        {
+            throw new SemanticError("Variable is not a slice", context.Start);
+        }
+    }
+
+    // VisitAppendMethod
+    public override ValueWrapper VisitAppendMethod(LanguageParser.AppendMethodContext context)
+    {
+        string name = context.ID().GetText();
+        ValueWrapper value = Visit(context.expr());
+        var slices = env.Get(name, context.Start);
+        if (slices is ArrayValueWrapper array)
+        {
+            ArrayValueWrapper newArray = new ArrayValueWrapper(new ValueWrapper[array.Value.Length + 1]);
+            for (int i = 0; i < array.Value.Length; i++)
+            {
+                newArray.Value[i] = array.Value[i];
+            }
+            newArray.Value[array.Value.Length] = value;
+            env.Assign(name, newArray, context.Start);
+            return defaultValue;
+        }
+        else
+        {
+            throw new SemanticError("Variable is not a slice", context.Start);
+        }
     }
 
     // VisitNumber

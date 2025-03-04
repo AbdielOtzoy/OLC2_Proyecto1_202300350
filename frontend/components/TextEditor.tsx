@@ -1,6 +1,13 @@
 import React from 'react'
 import Editor from '@monaco-editor/react';
-import { Button } from './ui/button';
+import {
+  Menubar,
+  MenubarContent,
+  MenubarItem,
+  MenubarMenu,
+  MenubarShortcut,
+  MenubarTrigger,
+} from "@/components/ui/menubar"
 
 interface TextEditorProps {
   code: string;
@@ -23,14 +30,50 @@ const TextEditor = ({ code, setCode, handleExecute}: TextEditorProps) => {
   }
 
   return (
-    <div className='flex flex-col items-center justify-center bg-[#131313]  w-2/3 h-full'>
-      <div className='flex gap-2 border-b-2 border-gray-800 p-2 w-full'>
-        <Button className='bg-[#267dff]' onClick={handleExecute}>Run</Button>
-        <Button onClick={() => setCode('')}>Clear</Button>
-        <Button onClick={handleCreate}>Create</Button>
-        <Button onClick={openFile}>Open</Button>
-        <Button onClick={saveFile}>Save</Button>
-      </div>
+    <div className='flex flex-col  justify-center bg-[#131313]  w-2/3 h-full ml-3'>
+      <Menubar className='bg-[#1e1e1e] text-white p-3 mb-2 border-b border-[#333]'>
+        <MenubarMenu>
+          <MenubarTrigger>File</MenubarTrigger>
+          <MenubarContent>
+            <MenubarItem onClick={handleCreate}>
+              New File <MenubarShortcut>⌘T</MenubarShortcut>
+            </MenubarItem>
+            <MenubarItem onClick={openFile}>
+              Open File <MenubarShortcut>⌘O</MenubarShortcut>
+            </MenubarItem>
+            <MenubarItem onClick={saveFile}>
+              Save File <MenubarShortcut>⌘S</MenubarShortcut>
+            </MenubarItem>
+          </MenubarContent>
+        </MenubarMenu>
+        <MenubarMenu>
+          {/* compile */}
+          <MenubarTrigger>Tools</MenubarTrigger>
+          <MenubarContent>
+            <MenubarItem onClick={handleExecute}>
+              Execute <MenubarShortcut>⌘R</MenubarShortcut>
+            </MenubarItem>
+            <MenubarItem onClick={() => setCode('')}>
+              Clear <MenubarShortcut>⌘K</MenubarShortcut>
+            </MenubarItem>
+          </MenubarContent>
+        </MenubarMenu>
+        <MenubarMenu>
+          {/* compile */}
+          <MenubarTrigger>Reports</MenubarTrigger>
+          <MenubarContent>
+            <MenubarItem onClick={() => console.log("errors clicked")}>
+              Errors 
+            </MenubarItem>
+            <MenubarItem onClick={() => console.log("symbol clicked")}>
+              Symbol Table 
+            </MenubarItem>
+            <MenubarItem onClick={() => console.log("ast clicked")}>
+              Abstract Syntax Tree
+            </MenubarItem>
+          </MenubarContent>
+        </MenubarMenu>
+    </Menubar>
       <Editor
         height="80%"
         defaultLanguage="go"

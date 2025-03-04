@@ -49,8 +49,8 @@ export default function Home() {
       />
 
       {/* terminal to show the output */}
-      <div className='bg-[#1e1e1e] text-white p-4 h-[80vh] flex flex-col gap-4 w-1/3 mt-[91px]'>
-        <h1>Output</h1>
+      <div className='bg-[#1e1e1e] text-white p-4 h-[80vh] flex flex-col gap-4 w-1/3 mt-[91px] mr-3'>
+        <h2>Output</h2>
         <pre>{output}</pre>
       </div >
 

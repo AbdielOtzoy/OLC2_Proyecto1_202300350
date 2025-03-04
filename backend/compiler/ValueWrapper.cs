@@ -10,4 +10,6 @@ public record BoolValueWrapper(bool Value) : ValueWrapper;
 
 public record RuneValueWrapper(char Value) : ValueWrapper;
 
+public record ArrayValueWrapper(ValueWrapper[] Value) : ValueWrapper;
+
 public record VoidBody : ValueWrapper;

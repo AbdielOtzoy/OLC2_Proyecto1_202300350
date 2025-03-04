@@ -2,21 +2,24 @@ grammar Language;
 
 program: (declaration NL?)*;
 
-declaration: varDeclaration | statement;
+declaration: varDeclaration | statement | slicesDeclaration;
 
 varDeclaration: 'var' ID TYPE ('=' expr)?
     | ID ':=' expr;
 
-statement: expr                                         # ExprStmt
-    | 'fmt.Println' '(' exprList ')'                    # PrintStmt
-    | '{' declaration* '}'                              # BlockStmt
-    | 'if' '(' expr ')' statement ('else' statement)?   # IfStmt
-    | 'switch' '(' expr ')' '{' caseClauseStmt* '}'     # SwitchStmt
-    | 'for' expr statement                              # ForStmt
-    | 'for' '(' forInit ';' expr? ';' expr? ')' statement # ForDeclStmt
-    | 'break' ';'                                       # BreakStmt
-    | 'continue' ';'                                    # ContinueStmt
-    | 'return' expr? ';'                                # ReturnStmt;
+slicesDeclaration: ID '='  '[]' TYPE '{' exprList? '}'
+    | 'var' ID '[]' TYPE;
+
+statement: expr                                             # ExprStmt
+    | 'fmt.Println' '(' exprList ')'                        # PrintStmt
+    | '{' declaration* '}'                                  # BlockStmt
+    | 'if' '(' expr ')' statement ('else' statement)?       # IfStmt
+    | 'switch' '(' expr ')' '{' caseClauseStmt* '}'         # SwitchStmt
+    | 'for' expr statement                                  # ForStmt
+    | 'for' '(' forInit ';' expr? ';' expr? ')' statement   # ForDeclStmt
+    | 'break' ';'                                           # BreakStmt
+    | 'continue' ';'                                        # ContinueStmt
+    | 'return' expr? ';'                                    # ReturnStmt;
 
 forInit: varDeclaration | expr ';';
 
@@ -27,6 +30,11 @@ exprList: expr (',' expr)*;
 expr:
     '(' expr ')'                                    # Parens
     | ID                                            # Identifier
+    | ID '[' expr ']'                               # Index
+    | 'slices' '.' 'Index' '('ID ',' expr ')'       # indexMethod
+    | 'strings' '.' 'Join' '(' ID ',' expr ')'      # joinMethod 
+    | 'len' '(' ID ')'                              # lenMethod
+    | 'append' '(' ID ',' expr ')'                  # appendMethod
     | BOOL                                          # Bool
     | FLOAT                                         # Float
     | STRING                                        # String
