@@ -1,8 +1,9 @@
 'use client'
 
 import TextEditor from "@/components/TextEditor";
-import api from "@/lib/api";
 import { useState } from "react";
+import { toast } from "sonner"
+
 
 export default function Home() {
   const [code, setCode] = useState('');
@@ -11,12 +12,29 @@ export default function Home() {
   const handleExecute = async () => {
     try {
       console.log(code);
-      const res = await api.post('/compile', { code });
+      const res = await fetch('http://localhost:5215/compile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ code })
+      });
+      
       console.log(res);
-      setOutput(res.data);
+      const data = await res.json();
+      console.log(data);
+
+      if(!res.ok) {
+        toast.error(data.message || 'Something went wrong');
+        throw new Error(data.message || 'Something went wrong');
+      }
+
+      setOutput(data.result);
+      
 
     } catch (error) {
       console.log(error);
+      setOutput('');
       
     }
   }
@@ -35,6 +53,7 @@ export default function Home() {
         <h1>Output</h1>
         <pre>{output}</pre>
       </div >
+
 
 
     </div>

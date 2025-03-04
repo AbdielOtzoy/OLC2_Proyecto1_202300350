@@ -5,6 +5,7 @@ using analyzer;
 using Antlr4.Runtime;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Antlr4.Runtime.Misc;
 
 namespace api.Controllers
 {
@@ -52,15 +53,41 @@ namespace api.Controllers
 
             var inputStream = new AntlrInputStream(request.Code);
             var lexer = new LanguageLexer(inputStream);
+
+            lexer.RemoveErrorListeners();
+            lexer.AddErrorListener(new DescriptiveErrorListener());
+
             var tokenStream = new CommonTokenStream(lexer);
             var parser = new LanguageParser(tokenStream);
 
-            var tree = parser.program();
+            parser.RemoveErrorListeners();
+            parser.AddErrorListener(new SyntaxErrorListener());
 
-            var visitor = new CompilerVisitor();
-            visitor.Visit(tree);
+            try
+            {
+                var tree = parser.program();
 
-            return Ok(visitor.output);
+                var visitor = new CompilerVisitor();
+                visitor.Visit(tree);
+
+                return Ok(new { result = visitor.output});
+            }
+            catch (ParseCanceledException e)
+            {
+                Console.WriteLine("mensaje:" + e.Message);
+                return BadRequest( new { message = e.Message });
+            }
+            catch (RecognitionException e)
+            {
+                Console.WriteLine("mensaje:" + e.Message);
+                return BadRequest( new { message = e.Message });
+            }
+            catch (SemanticError e)
+            {
+                Console.WriteLine("mensaje:" + e.Message);
+                return BadRequest( new { message = e.Message });
+            }
+
         }
     }
 }

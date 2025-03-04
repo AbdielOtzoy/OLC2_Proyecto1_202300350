@@ -32,13 +32,13 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
                 "string" => new StringValueWrapper(""),
                 "bool" => new BoolValueWrapper(false),
                 "rune" => new RuneValueWrapper(' '),
-                _ => throw new Exception("Invalid type")
+                _ => throw new SemanticError("Invalid type", context.Start)
             };
-            env.Declare(name, inferValue);
+            env.Declare(name, inferValue, context.Start);
             return defaultValue;
         } 
         ValueWrapper value = Visit(context.expr());
-        env.Declare(name, value);
+        env.Declare(name, value, context.Start);
         return defaultValue;
     }
 
@@ -64,7 +64,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
                     StringValueWrapper stringValue => stringValue.Value + " ",
                     BoolValueWrapper boolValue => boolValue.Value.ToString() + " ",
                     RuneValueWrapper runeValue => runeValue.Value.ToString() + " ",
-                    _ => throw new Exception("Invalid value")
+                    _ => throw new SemanticError("Invalid value", context.Start)
                 };
         }
         output += "\n"; 
@@ -105,7 +105,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         }
         else
         {
-            throw new Exception("Invalid condition");
+            throw new SemanticError("Invalid condition", context.Start);
         }
         return defaultValue;
     }
@@ -157,6 +157,102 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     {
         return defaultValue;
     }
+
+    // VisitForStmt
+    public override ValueWrapper VisitForStmt(LanguageParser.ForStmtContext context)
+    {
+        // | 'for' expr statement # ForStmt;
+        ValueWrapper condition = Visit(context.expr());
+
+        if(condition is not BoolValueWrapper)
+        {
+            throw new SemanticError("Invalid condition", context.Start);
+        }
+
+        while ((condition as BoolValueWrapper).Value)
+        {
+            Visit(context.statement());
+            condition = Visit(context.expr());
+        }
+
+        return defaultValue;
+    }
+
+    // VisitForDeclStmt
+    public override ValueWrapper VisitForDeclStmt(LanguageParser.ForDeclStmtContext context)
+    {
+        // | 'for' varDeclaration expr statement # ForDeclStmt;
+        Enviorment prevEnv = env;
+        env = new Enviorment(env);
+
+         if (context.forInit() != null)
+        {
+            Visit(context.forInit());
+        }
+
+        VisitForBody(context);
+
+        env = prevEnv;
+        return defaultValue;
+    }
+
+    // VisitForBody
+    public void VisitForBody(LanguageParser.ForDeclStmtContext context)
+    {
+        while (true)
+        {
+            if (context.expr(0) != null) // Si hay una condición
+            {
+                ValueWrapper condition = Visit(context.expr(0));
+                if (condition is not BoolValueWrapper boolValue || !boolValue.Value)
+                {
+                    break; // Salir del bucle si la condición es falsa
+                }
+            }
+
+            try
+            {
+                // 4. Ejecutar el cuerpo del for
+                Visit(context.statement());
+            }
+            catch (BreakException)
+            {
+                break; // Salir del bucle si se encuentra un 'break'
+            }
+            catch (ContinueException)
+            {
+                // Continuar con la siguiente iteración
+            }
+
+            // 5. Ejecutar el incremento (si existe)
+            if (context.expr(1) != null)
+            {
+                Visit(context.expr(1));
+            }
+        }
+    }
+
+    // VisitBreakStmt
+    public override ValueWrapper VisitBreakStmt(LanguageParser.BreakStmtContext context)
+    {
+        throw new BreakException();
+    }
+
+    // VisitContinueStmt
+    public override ValueWrapper VisitContinueStmt(LanguageParser.ContinueStmtContext context)
+    {
+        throw new ContinueException();
+    }
+
+    // VisitReturnStmt
+    public override ValueWrapper VisitReturnStmt(LanguageParser.ReturnStmtContext context)
+    {
+        if (context.expr() != null)
+        {
+            return Visit(context.expr());
+        }
+        return defaultValue;
+    }
     
 
     // VisitNegate 
@@ -167,7 +263,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         {
             IntValueWrapper intValue => new IntValueWrapper(-intValue.Value),
             FloatValueWrapper floatValue => new FloatValueWrapper(-floatValue.Value),
-            _ => throw new Exception("Invalid value")
+            _ => throw new SemanticError("Invalid value", context.Start)
         };
     }
 
@@ -181,7 +277,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     public override ValueWrapper VisitIdentifier(LanguageParser.IdentifierContext context)
     {
         string name = context.ID().GetText();
-        return env.Get(name);
+        return env.Get(name, context.Start);
     }
 
     // VisitNumber
@@ -221,7 +317,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             (FloatValueWrapper leftFloat, IntValueWrapper rightInt, "/") => new FloatValueWrapper(leftFloat.Value / rightInt.Value),
             (IntValueWrapper leftInt, FloatValueWrapper rightFloat, "/") => new FloatValueWrapper(leftInt.Value / rightFloat.Value),
             (FloatValueWrapper leftFloat, FloatValueWrapper rightFloat, "/") => new FloatValueWrapper(leftFloat.Value / rightFloat.Value),
-            _ => throw new Exception("Invalid operation")
+            _ => throw new SemanticError("Invalid operation", context.Start)
         };
 
         
@@ -236,7 +332,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         return (left, right) switch
         {
             (IntValueWrapper leftInt, IntValueWrapper rightInt) => new IntValueWrapper(leftInt.Value % rightInt.Value),
-            _ => throw new Exception("Invalid operation")
+            _ => throw new SemanticError("Invalid operation", context.Start)
         };
     }
 
@@ -259,7 +355,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             (FloatValueWrapper leftFloat, IntValueWrapper rightInt, "-") => new FloatValueWrapper(leftFloat.Value - rightInt.Value),
             (IntValueWrapper leftInt, FloatValueWrapper rightFloat, "-") => new FloatValueWrapper(leftInt.Value - rightFloat.Value),
             (FloatValueWrapper leftFloat, FloatValueWrapper rightFloat, "-") => new FloatValueWrapper(leftFloat.Value - rightFloat.Value),
-            _ => throw new Exception("Invalid operation")
+            _ => throw new SemanticError("Invalid operation", context.Start)
         };
     }
 
@@ -302,7 +398,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             (FloatValueWrapper leftFloat, IntValueWrapper rightInt, ">") => new BoolValueWrapper(leftFloat.Value > rightInt.Value),
             (FloatValueWrapper leftFloat, IntValueWrapper rightInt, "<=") => new BoolValueWrapper(leftFloat.Value <= rightInt.Value),
             (FloatValueWrapper leftFloat, IntValueWrapper rightInt, ">=") => new BoolValueWrapper(leftFloat.Value >= rightInt.Value),
-            _ => throw new Exception("Invalid operation")
+            _ => throw new SemanticError("Invalid operation", context.Start)
             };
     }
 
@@ -317,7 +413,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         {
             (BoolValueWrapper leftBool, BoolValueWrapper rightBool, "&&") => new BoolValueWrapper(leftBool.Value && rightBool.Value),
             (BoolValueWrapper leftBool, BoolValueWrapper rightBool, "||") => new BoolValueWrapper(leftBool.Value || rightBool.Value),
-            _ => throw new Exception("Invalid operation")
+            _ => throw new SemanticError("Invalid operation", context.Start)
         };
     }
 
@@ -328,7 +424,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         return value switch
         {
             BoolValueWrapper boolValue => new BoolValueWrapper(!boolValue.Value),
-            _ => throw new Exception("Invalid value")
+            _ => throw new SemanticError("Invalid value", context.Start)
         };
     }
 
@@ -344,7 +440,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         else
         {
             string name = context.expr(0).GetText();
-            env.Assign(name, value);
+            env.Assign(name, value, context.Start);
         }
 
         return value; 
@@ -384,7 +480,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             (StringValueWrapper leftString, StringValueWrapper rightString, "!=") => new BoolValueWrapper(leftString.Value != rightString.Value),
             (RuneValueWrapper leftRune, RuneValueWrapper rightRune, "==") => new BoolValueWrapper(leftRune.Value == rightRune.Value),
             (RuneValueWrapper leftRune, RuneValueWrapper rightRune, "!=") => new BoolValueWrapper(leftRune.Value != rightRune.Value),
-            _ => throw new Exception("Invalid operation")
+            _ => throw new SemanticError("Invalid operation", context.Start)
         };
     }
 
@@ -393,7 +489,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     {
         string name = context.ID().GetText();
         ValueWrapper value = Visit(context.expr());
-        ValueWrapper left = env.Get(name);
+        ValueWrapper left = env.Get(name, context.Start);
 
         ValueWrapper result = (left, value) switch
         {
@@ -403,10 +499,10 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             (FloatValueWrapper leftFloat, FloatValueWrapper rightFloat) => new FloatValueWrapper(leftFloat.Value + rightFloat.Value),
             (StringValueWrapper leftString, StringValueWrapper rightString) => new StringValueWrapper(leftString.Value + rightString.Value),
             (StringValueWrapper leftString, IntValueWrapper rightInt) => new StringValueWrapper(leftString.Value + rightInt.Value),
-            _ => throw new Exception("Invalid operation")
+            _ => throw new SemanticError("Invalid operation", context.Start)
         };
 
-        env.Assign(name, result);
+        env.Assign(name, result, context.Start);
         return defaultValue;
     }
 
@@ -415,7 +511,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     {
         string name = context.ID().GetText();
         ValueWrapper value = Visit(context.expr());
-        ValueWrapper left = env.Get(name);
+        ValueWrapper left = env.Get(name, context.Start);
 
         ValueWrapper result = (left, value) switch
         {
@@ -423,10 +519,44 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             (IntValueWrapper leftInt, FloatValueWrapper rightFloat) => new FloatValueWrapper(leftInt.Value - rightFloat.Value),
             (FloatValueWrapper leftFloat, IntValueWrapper rightInt) => new FloatValueWrapper(leftFloat.Value - rightInt.Value),
             (FloatValueWrapper leftFloat, FloatValueWrapper rightFloat) => new FloatValueWrapper(leftFloat.Value - rightFloat.Value),
-            _ => throw new Exception("Invalid operation")
+            _ => throw new SemanticError("Invalid operation", context.Start)
         };
 
-        env.Assign(name, result);
+        env.Assign(name, result, context.Start);
+        return defaultValue;
+    }
+
+    // VisitInc
+    public override ValueWrapper VisitInc(LanguageParser.IncContext context)
+    {
+        string name = context.ID().GetText();
+        ValueWrapper value = env.Get(name, context.Start);
+
+        ValueWrapper result = value switch
+        {
+            IntValueWrapper intValue => new IntValueWrapper(intValue.Value + 1),
+            FloatValueWrapper floatValue => new FloatValueWrapper(floatValue.Value + 1),
+            _ => throw new SemanticError("Invalid operation", context.Start)
+        };
+
+        env.Assign(name, result, context.Start);
+        return defaultValue;
+    }
+
+    // VisitDec
+    public override ValueWrapper VisitDec(LanguageParser.DecContext context)
+    {
+        string name = context.ID().GetText();
+        ValueWrapper value = env.Get(name, context.Start);
+
+        ValueWrapper result = value switch
+        {
+            IntValueWrapper intValue => new IntValueWrapper(intValue.Value - 1),
+            FloatValueWrapper floatValue => new FloatValueWrapper(floatValue.Value - 1),
+            _ => throw new SemanticError("Invalid operation", context.Start)
+        };
+
+        env.Assign(name, result, context.Start);
         return defaultValue;
     }
 

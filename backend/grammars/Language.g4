@@ -7,35 +7,44 @@ declaration: varDeclaration | statement;
 varDeclaration: 'var' ID TYPE ('=' expr)?
     | ID ':=' expr;
 
-statement: expr # ExprStmt
-    | 'fmt.Println' '(' exprList ')' # PrintStmt
-    | '{' declaration* '}' # BlockStmt
-    | 'if' '(' expr ')' statement ('else' statement)? # IfStmt
-    | 'switch' '(' expr ')' '{' caseClauseStmt* '}' # SwitchStmt;  
+statement: expr                                         # ExprStmt
+    | 'fmt.Println' '(' exprList ')'                    # PrintStmt
+    | '{' declaration* '}'                              # BlockStmt
+    | 'if' '(' expr ')' statement ('else' statement)?   # IfStmt
+    | 'switch' '(' expr ')' '{' caseClauseStmt* '}'     # SwitchStmt
+    | 'for' expr statement                              # ForStmt
+    | 'for' '(' forInit ';' expr? ';' expr? ')' statement # ForDeclStmt
+    | 'break' ';'                                       # BreakStmt
+    | 'continue' ';'                                    # ContinueStmt
+    | 'return' expr? ';'                                # ReturnStmt;
 
-caseClauseStmt: 'case' expr ':' declaration*  # CaseClause
-    | 'default' ':' declaration*          # DefaultClause;
+forInit: varDeclaration | expr ';';
+
+caseClauseStmt: 'case' expr ':' declaration*        # CaseClause
+    | 'default' ':' declaration*                    # DefaultClause;
 exprList: expr (',' expr)*;
 
 expr:
-    '(' expr ')'                           # Parens
-    | ID                                    # Identifier
-    | BOOL                                  # Bool
-    | FLOAT                                 # Float
-    | STRING                                # String
-    | INT                                   # Number
-    | RUNE                                  # Rune
-    | '!' expr                              # Not
-    | '-' expr                              # Negate
-    | expr '%' expr                         # Mod
-    | expr op = ('*' | '/') expr      # MulDiv
-    | expr op = ('+' | '-') expr            # AddSub
-    | expr op = ('>' | '<' | '>=' | '<=') expr # Relational
-    | expr op = ('==' | '!=') expr          # Equality
-    | expr op = ('&&' | '||') expr          # Logical
-    | expr '=' expr                           # Assign
-    | ID '+=' expr                          # AddAssign
-    | ID '-=' expr                          # SubAssign;
+    '(' expr ')'                                    # Parens
+    | ID                                            # Identifier
+    | BOOL                                          # Bool
+    | FLOAT                                         # Float
+    | STRING                                        # String
+    | INT                                           # Number
+    | RUNE                                          # Rune
+    | '!' expr                                      # Not
+    | '-' expr                                      # Negate
+    | expr '%' expr                                 # Mod
+    | expr op = ('*' | '/') expr                    # MulDiv
+    | expr op = ('+' | '-') expr                    # AddSub
+    | expr op = ('>' | '<' | '>=' | '<=') expr      # Relational
+    | expr op = ('==' | '!=') expr                  # Equality
+    | expr op = ('&&' | '||') expr                  # Logical
+    | expr '=' expr                                 # Assign
+    | ID '+=' expr                                  # AddAssign
+    | ID '-=' expr                                  # SubAssign
+    | ID '++'                                       # Inc
+    | ID '--'                                       # Dec;
 
 INT: [0-9]+;
 BOOL: 'true' | 'false';
