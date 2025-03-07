@@ -2,10 +2,14 @@ grammar Language;
 
 program: (declaration NL?)*;
 
-declaration: varDeclaration | statement | slicesDeclaration;
+declaration: varDeclaration | statement | slicesDeclaration | funcDeclaration;
 
 varDeclaration: 'var' ID TYPE ('=' expr)?
     | ID ':=' expr;
+
+funcDeclaration: 'func' ID '(' params? ')' TYPE? '{' declaration* '}';
+
+params: ID TYPE (',' ID TYPE)*;
 
 slicesDeclaration: ID '='  '[]' TYPE '{' exprList? '}'
     | 'var' ID '[]' TYPE;
@@ -29,7 +33,7 @@ exprList: expr (',' expr)*;
 
 expr:
     '(' expr ')'                                    # Parens
-    | ID                                            # Identifier
+    | expr call+                                    # Callee
     | ID '[' expr ']'                               # Index
     | 'slices' '.' 'Index' '('ID ',' expr ')'       # indexMethod
     | 'strings' '.' 'Join' '(' ID ',' expr ')'      # joinMethod 
@@ -49,10 +53,14 @@ expr:
     | expr op = ('==' | '!=') expr                  # Equality
     | expr op = ('&&' | '||') expr                  # Logical
     | expr '=' expr                                 # Assign
+    | ID                                            # Identifier
     | ID '+=' expr                                  # AddAssign
     | ID '-=' expr                                  # SubAssign
     | ID '++'                                       # Inc
     | ID '--'                                       # Dec;
+
+call: '(' args? ')';
+args: expr (',' expr)*;
 
 INT: [0-9]+;
 BOOL: 'true' | 'false';
@@ -63,7 +71,7 @@ RUNE: '\'' (ESCAPE | ~['\\]) '\'';
 fragment ESCAPE: '\\' [nrt0'\\];
 
 TYPE: 'int' | 'float64' | 'bool' | 'string' | 'rune';
-ID: [a-zA-Z_][a-zA-Z_0-9]*;
+ID: [a-zA-Z_][a-zA-Z_0-9.]*;
 
 WS: [ \t]+ -> skip;
 NL: [\r\n]+ -> skip;

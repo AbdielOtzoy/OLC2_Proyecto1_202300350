@@ -12,4 +12,6 @@ public record RuneValueWrapper(char Value) : ValueWrapper;
 
 public record ArrayValueWrapper(ValueWrapper[] Value) : ValueWrapper;
 
+public record FunctionValue(Invocable invocable, string Name) : ValueWrapper;
+
 public record VoidBody : ValueWrapper;

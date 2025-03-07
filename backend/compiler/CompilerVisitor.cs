@@ -1,11 +1,16 @@
 using analyzer;
 
-class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
+public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
 {
 
-    private ValueWrapper defaultValue = new VoidBody();
+    public ValueWrapper defaultValue = new VoidBody();
     public string output = "";
-    private Enviorment env = new Enviorment();
+    public Enviorment env;
+
+    public CompilerVisitor() {
+        env = new Enviorment(null);
+        Embeded.Generate(env);
+    }
 
     // VisitProgram
     public override ValueWrapper VisitProgram(LanguageParser.ProgramContext context)
@@ -39,6 +44,14 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         } 
         ValueWrapper value = Visit(context.expr());
         env.Declare(name, value, context.Start);
+        return defaultValue;
+    }
+
+    // VisitFuncDeclaration
+    public override ValueWrapper VisitFuncDeclaration(LanguageParser.FuncDeclarationContext context)
+    {
+        var foreign = new ForeignFunction(env, context);
+        env.Declare(context.ID().GetText(), new FunctionValue(foreign, context.ID().GetText()), context.Start);
         return defaultValue;
     }
 
@@ -91,6 +104,7 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             output += value switch
                 {
                     IntValueWrapper intValue => intValue.Value.ToString() + " ",
+                    ArrayValueWrapper arrayValue => string.Join<ValueWrapper>(" ", arrayValue.Value) + " ", // Especificar el tipo genérico
                     FloatValueWrapper floatValue => floatValue.Value.ToString() + " ",
                     StringValueWrapper stringValue => stringValue.Value + " ",
                     BoolValueWrapper boolValue => boolValue.Value.ToString() + " ",
@@ -98,9 +112,9 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
                     _ => throw new SemanticError("Invalid value", context.Start)
                 };
         }
+        Console.WriteLine(output);
         output += "\n"; 
         return defaultValue;
-
     }
 
 
@@ -278,11 +292,13 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     // VisitReturnStmt
     public override ValueWrapper VisitReturnStmt(LanguageParser.ReturnStmtContext context)
     {
-        if (context.expr() != null)
+        ValueWrapper value = defaultValue;
+        if(context.expr() != null)
         {
-            return Visit(context.expr());
+            value = Visit(context.expr());
         }
-        return defaultValue;
+
+        throw new ReturnException(value);
     }
     
 
@@ -706,6 +722,38 @@ class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
 
         env.Assign(name, result, context.Start);
         return defaultValue;
+    }
+
+    // VisitCalle
+    public override ValueWrapper VisitCallee(LanguageParser.CalleeContext context)
+    {
+        ValueWrapper callee = Visit(context.expr());
+
+        foreach(var call in context.call()){
+            if(callee is FunctionValue functionvalue){
+                callee = VisitCall(functionvalue.invocable, call.args());
+            } else {
+                throw new SemanticError("Invalid operation", context.Start);
+            }
+        }
+
+        return callee;
+    }
+
+    // VisitCall
+    public ValueWrapper VisitCall(Invocable invocable, LanguageParser.ArgsContext context)
+    {
+        List<ValueWrapper> args = new List<ValueWrapper>();
+
+        if(context != null) {
+            foreach (var expr in context.expr())
+            {
+                args.Add(Visit(expr));
+            }
+        }
+        //TODO: implementar validación de argumentos
+
+        return invocable.Invoke(args, this);
     }
 
 
