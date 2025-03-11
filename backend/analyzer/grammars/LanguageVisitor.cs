@@ -69,6 +69,18 @@ public interface ILanguageVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitSlicesDeclaration([NotNull] LanguageParser.SlicesDeclarationContext context);
 	/// <summary>
+	/// Visit a parse tree produced by <see cref="LanguageParser.matrixDeclaration"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitMatrixDeclaration([NotNull] LanguageParser.MatrixDeclarationContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="LanguageParser.matrixRows"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitMatrixRows([NotNull] LanguageParser.MatrixRowsContext context);
+	/// <summary>
 	/// Visit a parse tree produced by <see cref="LanguageParser.structDeclaration"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>

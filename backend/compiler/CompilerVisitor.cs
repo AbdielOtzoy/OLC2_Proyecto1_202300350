@@ -22,6 +22,38 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         return defaultValue;
     }
 
+    public void ExecuteMain(LanguageParser.ProgramContext programContext)
+    {
+        // Buscar la función main
+        var searchVisitor = new SearchVisitor();
+        var mainFunctionContext = searchVisitor.Visit(programContext);
+
+        if (mainFunctionContext != null)
+        {
+            // Declarar la función main en el entorno
+            string mainName = mainFunctionContext.ID(0).GetText();
+            var mainFunction = new ForeignFunction(env, mainFunctionContext);
+            env.Declare(mainName, new FunctionValue(mainFunction, mainName), mainFunctionContext.Start);
+
+            // Ejecutar la función main
+            var mainFunctionValue = env.Get(mainName, mainFunctionContext.Start);
+            if (mainFunctionValue is FunctionValue functionValue)
+            {
+                functionValue.invocable.Invoke(new List<ValueWrapper>(), this); // Invocar la función main sin argumentos
+            }
+            else
+            {
+                throw new Exception("La función main no es invocable");
+            }
+        }
+        else
+        {
+            throw new Exception("No se encontró la función main");
+        }
+    }
+
+
+
     // VisitVarDeclaration
     public override ValueWrapper VisitVarDeclaration(LanguageParser.VarDeclarationContext context)
     {
@@ -108,6 +140,49 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         return defaultValue;
     }
 
+   public override ValueWrapper VisitMatrixDeclaration(LanguageParser.MatrixDeclarationContext context)
+{
+    Console.WriteLine("MatrixDeclaration");
+
+    string name = context.ID().GetText();
+
+    // Verificar si la variable ya existe
+    if (env.Exists(name))
+    {
+        throw new SemanticError($"Variable {name} already declared", context.Start);
+    }
+
+    // Inicializar la matriz
+    List<ValueWrapper[]> rows = new List<ValueWrapper[]>();
+
+    // Obtener el contexto de matrixRows
+    var matrixRowsContext = context.matrixRows();
+
+    // Recorrer los hijos de matrixRows
+    foreach (var child in matrixRowsContext.children)
+    {
+        // Verificar si el hijo es un exprList (una fila de la matriz)
+        if (child is LanguageParser.ExprListContext exprListContext)
+        {
+            List<ValueWrapper> values = new List<ValueWrapper>();
+
+            // Recorrer las expresiones en exprList
+            foreach (var expr in exprListContext.expr())
+            {
+                values.Add(Visit(expr));
+            }
+
+            // Agregar la fila a la matriz
+            rows.Add(values.ToArray());
+        }
+    }
+
+    // Declarar la variable en el entorno
+    env.Declare(name, new MatrixValueWrapper(rows.ToArray()), context.Start);
+
+    return defaultValue;
+}
+
     // VisitStructDeclaration
     public override ValueWrapper VisitStructDeclaration(LanguageParser.StructDeclarationContext context)
     {
@@ -170,10 +245,44 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
                 }
                 output += "] ";
             }
+            if(value is MatrixValueWrapper){
+                output += "[";
+                bool first = true;
+                foreach (var row in ((MatrixValueWrapper)value).Value)
+                {
+                    if (!first)
+                    {
+                        output += ", ";
+                    }
+                    output += "[";
+                    bool firstRow = true;
+                    foreach (var item in row)
+                    {
+                        if (!firstRow)
+                        {
+                            output += ", ";
+                        }
+                        output += item switch
+                        {
+                            IntValueWrapper intValue => intValue.Value.ToString(),
+                            FloatValueWrapper floatValue => floatValue.Value.ToString(),
+                            StringValueWrapper stringValue => stringValue.Value,
+                            BoolValueWrapper boolValue => boolValue.Value.ToString(),
+                            RuneValueWrapper runeValue => runeValue.Value.ToString(),
+                            _ => throw new SemanticError("Invalid value", context.Start)
+                        };
+                        firstRow = false;
+                    }
+                    output += "]";
+                    first = false;
+                }
+                output += "] ";
+            }
             output += value switch
                 {
                     IntValueWrapper intValue => intValue.Value.ToString() + " ",
                     ArrayValueWrapper arrayValue => " ", 
+                    MatrixValueWrapper matrixValue => " ",
                     FloatValueWrapper floatValue => floatValue.Value.ToString() + " ",
                     StringValueWrapper stringValue => stringValue.Value + " ",
                     BoolValueWrapper boolValue => boolValue.Value.ToString() + " ",

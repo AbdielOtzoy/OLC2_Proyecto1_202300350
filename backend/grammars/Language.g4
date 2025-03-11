@@ -2,7 +2,7 @@ grammar Language;
 
 program: (declaration NL?)*;
 
-declaration: varDeclaration | statement | slicesDeclaration | funcDeclaration | structDeclaration;
+declaration: varDeclaration | statement | slicesDeclaration | funcDeclaration | structDeclaration | matrixDeclaration;
 
 varDeclaration: 'var' ID TYPE ('=' expr)?
     | ID ':=' expr
@@ -13,8 +13,13 @@ funcDeclaration: 'func' ID '(' params? ')' TYPE? '{' declaration* '}'
 
 params: ID TYPE (',' ID TYPE)*;
 
-slicesDeclaration: ID ':='  '[]' TYPE '{' exprList? '}'
-    | 'var' ID '[]' TYPE;
+slicesDeclaration: ID ':=' '[]' TYPE '{' exprList? '}'  
+    | 'var' ID '[]' TYPE ;                               
+
+matrixDeclaration: ID ':=' '[][]' TYPE '{' matrixRows '}'
+    | 'var' ID '[][]' TYPE;                           
+
+matrixRows: '{' exprList? '}' (',' '{' exprList? '}')*;
 
 structDeclaration: 'type' ID  'struct' '{' structBody* '}';
 
