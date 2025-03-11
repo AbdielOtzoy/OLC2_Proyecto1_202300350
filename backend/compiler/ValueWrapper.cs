@@ -14,4 +14,8 @@ public record ArrayValueWrapper(ValueWrapper[] Value) : ValueWrapper;
 
 public record FunctionValue(Invocable invocable, string Name) : ValueWrapper;
 
+public record InstanceValue(Instance Instance) : ValueWrapper;
+
+public record StructValue(Struct Struct) : ValueWrapper;
+
 public record VoidBody : ValueWrapper;

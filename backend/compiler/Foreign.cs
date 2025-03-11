@@ -11,6 +11,8 @@ public class ForeignFunction : Invocable
         this.context = context;
     }
 
+    
+
     public int Arity(){
         if(context.@params() == null) {
             return 0;
@@ -45,6 +47,13 @@ public class ForeignFunction : Invocable
 
         visitor.env = beforeCallEnv;
         return visitor.defaultValue;
+    }
+
+    public ForeignFunction Bind(Instance instance, string referenceName){
+        var hiddenEnv = new Enviorment(clousure);
+        // TODO: implement the reference name struct instead of "this"
+        hiddenEnv.Declare(referenceName, new InstanceValue(instance), null);
+        return new ForeignFunction(hiddenEnv, context);
     }
 
 }

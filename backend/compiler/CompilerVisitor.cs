@@ -25,7 +25,7 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     // VisitVarDeclaration
     public override ValueWrapper VisitVarDeclaration(LanguageParser.VarDeclarationContext context)
     {
-        string name = context.ID().GetText();
+        string name = context.ID(0).GetText();
         // si no tiene valor asignado, se le asigna un valor por defecto segun el tipo
         if(context.expr() == null)
         {
@@ -50,9 +50,32 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     // VisitFuncDeclaration
     public override ValueWrapper VisitFuncDeclaration(LanguageParser.FuncDeclarationContext context)
     {
-        var foreign = new ForeignFunction(env, context);
-        env.Declare(context.ID().GetText(), new FunctionValue(foreign, context.ID().GetText()), context.Start);
-        return defaultValue;
+        if(context.ID(2) == null) {
+            // se trata de una declaración de función normal
+            var foreign = new ForeignFunction(env, context);
+            env.Declare(context.ID(0).GetText(), new FunctionValue(foreign, context.ID(0).GetText()), context.Start);
+            return defaultValue;
+        } else {
+            // se declara una función asociada a un struct
+            var referenceName = context.ID(0).GetText();
+            var structName = context.ID(1).GetText();
+            var funcStructName = context.ID(2).GetText();
+
+            var structValue = env.Get(structName, context.Start);
+
+            if(structValue is not StructValue) {
+                throw new SemanticError("Invalid struct", context.Start);
+            }
+
+            var foreign = new ForeignFunction(env, context);
+
+            var structInstance = ((StructValue)structValue).Struct;
+           
+            var method = new ForeignFunction(env, context);
+            structInstance.AddMethod(funcStructName, method, referenceName);
+
+            return defaultValue;
+        }
     }
 
     // VisitSlicesDeclaration
@@ -84,6 +107,30 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
 
         return defaultValue;
     }
+
+    // VisitStructDeclaration
+    public override ValueWrapper VisitStructDeclaration(LanguageParser.StructDeclarationContext context)
+    {
+        Dictionary<string, LanguageParser.VarDeclarationContext> fields = new Dictionary<string, LanguageParser.VarDeclarationContext>();
+        Dictionary<string, ForeignFunction> methods = new Dictionary<string, ForeignFunction>();
+
+        foreach(var field in context.structBody()) {
+            if(field.varDeclaration() != null) {
+                var varDeclaration = field.varDeclaration();
+                Console.WriteLine("Field: " + varDeclaration.ID(0).GetText());
+                fields.Add(varDeclaration.ID(0).GetText(), varDeclaration);
+            }
+            
+        }
+
+        Struct newStruct = new Struct(context.ID().GetText(), fields, methods);
+
+        Console.WriteLine("Struct: " + newStruct.Name);
+
+        env.Declare(context.ID().GetText(), new StructValue(newStruct), context.Start);
+
+        return defaultValue;
+    }
     
 
     // VisitExprStmt
@@ -101,10 +148,32 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         foreach (var expr in context.exprList().expr())
         {
             ValueWrapper value = Visit(expr);
+            if(value is ArrayValueWrapper) {
+                output += "[";
+                bool first = true;
+                foreach (var item in ((ArrayValueWrapper)value).Value)
+                {
+                    if (!first)
+                    {
+                        output += ", ";
+                    }
+                    output += item switch
+                    {
+                        IntValueWrapper intValue => intValue.Value.ToString(),
+                        FloatValueWrapper floatValue => floatValue.Value.ToString(),
+                        StringValueWrapper stringValue => stringValue.Value,
+                        BoolValueWrapper boolValue => boolValue.Value.ToString(),
+                        RuneValueWrapper runeValue => runeValue.Value.ToString(),
+                        _ => throw new SemanticError("Invalid value", context.Start)
+                    };
+                    first = false;
+                }
+                output += "] ";
+            }
             output += value switch
                 {
                     IntValueWrapper intValue => intValue.Value.ToString() + " ",
-                    ArrayValueWrapper arrayValue => string.Join<ValueWrapper>(" ", arrayValue.Value) + " ", // Especificar el tipo genérico
+                    ArrayValueWrapper arrayValue => " ", 
                     FloatValueWrapper floatValue => floatValue.Value.ToString() + " ",
                     StringValueWrapper stringValue => stringValue.Value + " ",
                     BoolValueWrapper boolValue => boolValue.Value.ToString() + " ",
@@ -320,6 +389,36 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         return new FloatValueWrapper(float.Parse(context.GetText()));
     }
 
+    // VisitNew
+    public override ValueWrapper VisitNew(LanguageParser.NewContext context)
+    {
+        ValueWrapper structValue = env.Get(context.ID().GetText(), context.Start);
+        if(structValue is not StructValue) {
+            throw new SemanticError("Invalid struc  t", context.Start);
+        }
+
+        List<ValueWrapper> args = new List<ValueWrapper>();
+
+        /*
+            args: fieldInit (',' fieldInit)*;
+            fieldInit: ID ':' expr;
+        */
+
+        if(context.fields() != null) {
+            foreach (var fieldInit in context.fields().fieldInit())
+            {
+                string name = fieldInit.ID().GetText();
+                ValueWrapper value = Visit(fieldInit.expr());
+                Console.WriteLine("Name: " + name + " Value: " + value);
+                args.Add(value);
+            }
+        }
+
+        var instance = ((StructValue)structValue).Struct.Invoke(args, this);
+
+        return instance;
+    }
+
     // VisitIdentifier
     public override ValueWrapper VisitIdentifier(LanguageParser.IdentifierContext context)
     {
@@ -362,7 +461,8 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
                     }
                 }
             }
-            throw new SemanticError("Value not found in slice", context.Start);
+            // return -1
+            return new IntValueWrapper(-1);
         }
         else
         {
@@ -424,6 +524,7 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     // VisitAppendMethod
     public override ValueWrapper VisitAppendMethod(LanguageParser.AppendMethodContext context)
     {
+        // add the value to the slice and return the new slice
         string name = context.ID().GetText();
         ValueWrapper value = Visit(context.expr());
         var slices = env.Get(name, context.Start);
@@ -436,12 +537,74 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             }
             newArray.Value[array.Value.Length] = value;
             env.Assign(name, newArray, context.Start);
-            return defaultValue;
+            return newArray;
         }
         else
         {
             throw new SemanticError("Variable is not a slice", context.Start);
         }
+    }
+
+    // VisitAtoiMethod
+    public override ValueWrapper VisitAtoiMethod(LanguageParser.AtoiMethodContext context)
+    {
+        ValueWrapper value = Visit(context.expr());
+        if (value is StringValueWrapper stringValue)
+        {
+            if (int.TryParse(stringValue.Value, out int result))
+            {
+                return new IntValueWrapper(result);
+            }
+            else
+            {
+                throw new SemanticError("strconv.Atoi: parsing error", context.Start);
+            }
+        }
+        else
+        {
+            throw new SemanticError("strconv.Atoi: argument must be a string", context.Start);
+        }
+    }
+
+    // VisitParseFloatMethod
+    public override ValueWrapper VisitParseFloatMethod(LanguageParser.ParseFloatMethodContext context)
+    {
+        ValueWrapper value = Visit(context.expr());
+        if (value is StringValueWrapper stringValue)
+        {
+            if (float.TryParse(stringValue.Value, out float result))
+            {
+                return new FloatValueWrapper(result);
+            }
+            else
+            {
+                throw new SemanticError("strconv.ParseFloat: parsing error", context.Start);
+            }
+        }
+        else
+        {
+            throw new SemanticError("strconv.ParseFloat: argument must be a string", context.Start);
+        }
+    }
+
+    // VisitTypeOfMethod
+    public override ValueWrapper VisitTypeOfMethod(LanguageParser.TypeOfMethodContext context)
+    {
+        // 'reflect' '.' 'TypeOf' '(' ID ')'
+        string name = context.ID().GetText();
+        ValueWrapper value = env.Get(name, context.Start);
+
+        return new StringValueWrapper(value switch
+        {
+            IntValueWrapper => "int",
+            FloatValueWrapper => "float64",
+            StringValueWrapper => "string",
+            BoolValueWrapper => "bool",
+            RuneValueWrapper => "rune",
+            ArrayValueWrapper => "array",
+            StructValue => "struct",
+            _ => throw new SemanticError("Invalid value", context.Start)
+        });
     }
 
     // VisitNumber
@@ -595,19 +758,72 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     // VisitAssign
     public override ValueWrapper VisitAssign(LanguageParser.AssignContext context)
     {
+        var asignee = context.expr(0);
         ValueWrapper value = Visit(context.expr(1));
 
-        if (context.expr(0) is LanguageParser.AssignContext leftAssign)
-        {
-            value = VisitAssign(leftAssign);
+        if(asignee is LanguageParser.IdentifierContext idContext){
+            string id = idContext.ID().GetText();
+            env.Assign(id, value, context.Start);
+            return defaultValue;
         }
-        else
-        {
-            string name = context.expr(0).GetText();
-            env.Assign(name, value, context.Start);
+        else if (asignee is LanguageParser.CalleeContext calleContext) {
+            ValueWrapper callee = Visit(calleContext.expr());
+
+            for(int i = 0; i < calleContext.call().Length; i++) {
+                var action = calleContext.call(i);
+
+                if(i == calleContext.call().Length -1) {
+                    if(action is LanguageParser.GetContext propertyAcces) {
+                        if(callee is InstanceValue instanceValue) {
+                            var instance = instanceValue.Instance;
+                            var propertyName = propertyAcces.ID().GetText();
+                            instance.Set(propertyName, value);
+                        } else {
+                            throw new SemanticError("Invalid property access", context.Start);
+                        }
+                    }
+
+                }
+
+                if(action is LanguageParser.FuncCallContext funcCall){
+                    if(callee is FunctionValue functionvalue){
+                        callee = VisitCall(functionvalue.invocable, funcCall.args());
+                    } else {
+                        throw new SemanticError("Invalid function call", context.Start);
+                    }
+                }
+                else if (action is LanguageParser.GetContext propertyAcces) {
+                    if(callee is InstanceValue instanceValue) {
+                        callee = instanceValue.Instance.Get(propertyAcces.ID().GetText());
+                    } else {
+                        throw new SemanticError("Invalid property access", context.Start);
+                    }
+                }
+            }
+
+            return callee;
+        } else if (asignee is LanguageParser.IndexContext indexContext) {
+            string name = indexContext.ID().GetText();
+            ValueWrapper index = Visit(indexContext.expr());
+            if (index is not IntValueWrapper intValue)
+            {
+                throw new SemanticError("Array index must be an integer", context.Start);
+            }
+            int i = intValue.Value;
+            ValueWrapper array = env.Get(name, context.Start);
+            if (array is not ArrayValueWrapper arrayValue)
+            {
+                throw new SemanticError("Variable is not an array", context.Start);
+            }
+            arrayValue.Value[i] = value;
+            return defaultValue;
+        }
+        else {
+            throw new SemanticError("Invalid assignee", context.Start);
         }
 
-        return value; 
+        return defaultValue;
+        
     }
 
 
@@ -730,10 +946,19 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         ValueWrapper callee = Visit(context.expr());
 
         foreach(var call in context.call()){
-            if(callee is FunctionValue functionvalue){
-                callee = VisitCall(functionvalue.invocable, call.args());
-            } else {
-                throw new SemanticError("Invalid operation", context.Start);
+            if(call is LanguageParser.FuncCallContext funcCall){
+                if(callee is FunctionValue functionvalue){
+                    callee = VisitCall(functionvalue.invocable, funcCall.args());
+                } else {
+                    throw new SemanticError("Invalid function call", context.Start);
+                }
+            } else if (call is LanguageParser.GetContext propertyAcces) {
+                if(callee is InstanceValue instanceValue) {
+                    Console.WriteLine("Property access", propertyAcces.ID().GetText());
+                    callee = instanceValue.Instance.Get(propertyAcces.ID().GetText());
+                } else {
+                    throw new SemanticError("Invalid property access", context.Start);
+                }
             }
         }
 
@@ -744,6 +969,11 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     public ValueWrapper VisitCall(Invocable invocable, LanguageParser.ArgsContext context)
     {
         List<ValueWrapper> args = new List<ValueWrapper>();
+
+        /*
+            call: '(' args? ')' #FuncCall | '.' ID #Get;
+            args: expr (',' expr)*;
+        */
 
         if(context != null) {
             foreach (var expr in context.expr())

@@ -2,28 +2,34 @@ grammar Language;
 
 program: (declaration NL?)*;
 
-declaration: varDeclaration | statement | slicesDeclaration | funcDeclaration;
+declaration: varDeclaration | statement | slicesDeclaration | funcDeclaration | structDeclaration;
 
 varDeclaration: 'var' ID TYPE ('=' expr)?
-    | ID ':=' expr;
+    | ID ':=' expr
+    | ID (TYPE | ID);
 
-funcDeclaration: 'func' ID '(' params? ')' TYPE? '{' declaration* '}';
+funcDeclaration: 'func' ID '(' params? ')' TYPE? '{' declaration* '}'
+   | 'func' '(' ID ID ')' ID '(' params? ')''{' declaration* '}';
 
 params: ID TYPE (',' ID TYPE)*;
 
-slicesDeclaration: ID '='  '[]' TYPE '{' exprList? '}'
+slicesDeclaration: ID ':='  '[]' TYPE '{' exprList? '}'
     | 'var' ID '[]' TYPE;
+
+structDeclaration: 'type' ID  'struct' '{' structBody* '}';
+
+structBody: varDeclaration; 
 
 statement: expr                                             # ExprStmt
     | 'fmt.Println' '(' exprList ')'                        # PrintStmt
     | '{' declaration* '}'                                  # BlockStmt
-    | 'if' '(' expr ')' statement ('else' statement)?       # IfStmt
+    | 'if' expr  statement ('else' statement)?              # IfStmt
     | 'switch' '(' expr ')' '{' caseClauseStmt* '}'         # SwitchStmt
     | 'for' expr statement                                  # ForStmt
     | 'for' '(' forInit ';' expr? ';' expr? ')' statement   # ForDeclStmt
-    | 'break' ';'                                           # BreakStmt
-    | 'continue' ';'                                        # ContinueStmt
-    | 'return' expr? ';'                                    # ReturnStmt;
+    | 'break'                                               # BreakStmt
+    | 'continue'                                            # ContinueStmt
+    | 'return' expr?                                        # ReturnStmt;
 
 forInit: varDeclaration | expr ';';
 
@@ -39,6 +45,9 @@ expr:
     | 'strings' '.' 'Join' '(' ID ',' expr ')'      # joinMethod 
     | 'len' '(' ID ')'                              # lenMethod
     | 'append' '(' ID ',' expr ')'                  # appendMethod
+    | 'strconv' '.' 'Atoi' '(' expr ')'               # atoiMethod
+    | 'strconv' '.' 'ParseFloat' '(' expr ')'       # parseFloatMethod
+    | 'reflect' '.' 'TypeOf' '(' ID ')'             # typeOfMethod
     | BOOL                                          # Bool
     | FLOAT                                         # Float
     | STRING                                        # String
@@ -53,14 +62,19 @@ expr:
     | expr op = ('==' | '!=') expr                  # Equality
     | expr op = ('&&' | '||') expr                  # Logical
     | expr '=' expr                                 # Assign
+    | ID '(' fields ')'                              # New
     | ID                                            # Identifier
     | ID '+=' expr                                  # AddAssign
     | ID '-=' expr                                  # SubAssign
     | ID '++'                                       # Inc
     | ID '--'                                       # Dec;
 
-call: '(' args? ')';
+call: '(' args? ')' #FuncCall | '.' ID #Get;
 args: expr (',' expr)*;
+
+fields: fieldInit (',' fieldInit)*;
+
+fieldInit: ID ':' expr;
 
 INT: [0-9]+;
 BOOL: 'true' | 'false';
@@ -71,7 +85,7 @@ RUNE: '\'' (ESCAPE | ~['\\]) '\'';
 fragment ESCAPE: '\\' [nrt0'\\];
 
 TYPE: 'int' | 'float64' | 'bool' | 'string' | 'rune';
-ID: [a-zA-Z_][a-zA-Z_0-9.]*;
+ID: [a-zA-Z_][a-zA-Z_0-9]*;
 
 WS: [ \t]+ -> skip;
 NL: [\r\n]+ -> skip;
