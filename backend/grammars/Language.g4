@@ -9,7 +9,7 @@ varDeclaration: 'var' ID TYPE ('=' expr)?
     | ID (TYPE | ID);
 
 funcDeclaration: 'func' ID '(' params? ')' TYPE? '{' declaration* '}'
-   | 'func' '(' ID ID ')' ID '(' params? ')''{' declaration* '}';
+   | 'func' '(' ID ID ')' ID '(' params? ')' TYPE? '{' declaration* '}';
 
 params: ID TYPE (',' ID TYPE)*;
 
@@ -19,7 +19,7 @@ slicesDeclaration: ID ':=' '[]' TYPE '{' exprList? '}'
 matrixDeclaration: ID ':=' '[][]' TYPE '{' matrixRows '}'
     | 'var' ID '[][]' TYPE;                           
 
-matrixRows: '{' exprList? '}' (',' '{' exprList? '}')*;
+matrixRows: '{' exprList? '}' (',' '{' exprList? '}')* ','?;
 
 structDeclaration: 'type' ID  'struct' '{' structBody* '}';
 
@@ -29,9 +29,10 @@ statement: expr                                             # ExprStmt
     | 'fmt.Println' '(' exprList ')'                        # PrintStmt
     | '{' declaration* '}'                                  # BlockStmt
     | 'if' expr  statement ('else' statement)?              # IfStmt
-    | 'switch' '(' expr ')' '{' caseClauseStmt* '}'         # SwitchStmt
+    | 'switch' expr  '{' caseClauseStmt* '}'                # SwitchStmt
+    | 'for' ID ',' ID ':=' 'range' ID statement             # ForRangeStmt
     | 'for' expr statement                                  # ForStmt
-    | 'for' '(' forInit ';' expr? ';' expr? ')' statement   # ForDeclStmt
+    | 'for' forInit ';' expr? ';' expr? statement           # ForDeclStmt
     | 'break'                                               # BreakStmt
     | 'continue'                                            # ContinueStmt
     | 'return' expr?                                        # ReturnStmt;
@@ -46,9 +47,11 @@ expr:
     '(' expr ')'                                    # Parens
     | expr call+                                    # Callee
     | ID '[' expr ']'                               # Index
+    | ID '[' expr']' '[' expr ']'                   # MatrixIndex
+    | '[]' TYPE '{' exprList? '}'                   # Slice
     | 'slices' '.' 'Index' '('ID ',' expr ')'       # indexMethod
     | 'strings' '.' 'Join' '(' ID ',' expr ')'      # joinMethod 
-    | 'len' '(' ID ')'                              # lenMethod
+    | 'len' '(' expr ')'                              # lenMethod
     | 'append' '(' ID ',' expr ')'                  # appendMethod
     | 'strconv' '.' 'Atoi' '(' expr ')'               # atoiMethod
     | 'strconv' '.' 'ParseFloat' '(' expr ')'       # parseFloatMethod
@@ -58,6 +61,7 @@ expr:
     | STRING                                        # String
     | INT                                           # Number
     | RUNE                                          # Rune
+    | NIL                                           # Nil
     | '!' expr                                      # Not
     | '-' expr                                      # Negate
     | expr '%' expr                                 # Mod
@@ -67,7 +71,7 @@ expr:
     | expr op = ('==' | '!=') expr                  # Equality
     | expr op = ('&&' | '||') expr                  # Logical
     | expr '=' expr                                 # Assign
-    | ID '(' fields ')'                              # New
+    | ID '{' fields '}'                             # New
     | ID                                            # Identifier
     | ID '+=' expr                                  # AddAssign
     | ID '-=' expr                                  # SubAssign
@@ -77,17 +81,19 @@ expr:
 call: '(' args? ')' #FuncCall | '.' ID #Get;
 args: expr (',' expr)*;
 
-fields: fieldInit (',' fieldInit)*;
+fields: fieldInit (',' fieldInit)* ','?;
 
 fieldInit: ID ':' expr;
 
 INT: [0-9]+;
 BOOL: 'true' | 'false';
 FLOAT: [0-9]+ '.' [0-9]+;
-STRING: '"' ~[\r\n"]* '"';
+STRING: '"' (ESCAPE | ~["\\\r\n])* '"';
 RUNE: '\'' (ESCAPE | ~['\\]) '\'';
+NIL: 'nil';
 
-fragment ESCAPE: '\\' [nrt0'\\];
+fragment ESCAPE: '\\' (["\\/bfnrt] | 'u' HEX HEX HEX HEX);
+fragment HEX: [0-9a-fA-F];
 
 TYPE: 'int' | 'float64' | 'bool' | 'string' | 'rune';
 ID: [a-zA-Z_][a-zA-Z_0-9]*;

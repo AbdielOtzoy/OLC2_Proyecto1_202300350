@@ -68,7 +68,7 @@ namespace api.Controllers
                 var tree = parser.program();
 
                 var visitor = new CompilerVisitor();
-                //visitor.Visit(tree);
+                visitor.Visit(tree);
                 visitor.ExecuteMain(tree);
 
                 return Ok(new { result = visitor.output});

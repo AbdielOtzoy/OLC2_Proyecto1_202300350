@@ -21,3 +21,5 @@ public record InstanceValue(Instance Instance) : ValueWrapper;
 public record StructValue(Struct Struct) : ValueWrapper;
 
 public record VoidBody : ValueWrapper;
+
+public record NilValueWrapper : ValueWrapper;

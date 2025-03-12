@@ -1,4 +1,6 @@
-import React from 'react'
+'use client'
+
+import React, { useEffect, useState } from 'react'
 import Editor from '@monaco-editor/react';
 import {
   Menubar,
@@ -9,6 +11,11 @@ import {
   MenubarTrigger,
 } from "@/components/ui/menubar"
 
+import {
+  fileOpen,
+  fileSave,
+} from 'browser-fs-access';
+
 interface TextEditorProps {
   code: string;
   setCode: (code: string) => void;
@@ -16,17 +23,40 @@ interface TextEditorProps {
 }
 
 const TextEditor = ({ code, setCode, handleExecute}: TextEditorProps) => {
+  const [fileName, setFileName] = useState('');
 
-  const handleCreate = () => {
-    console.log('create file');
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key.toLowerCase() === 'r') {
+        event.preventDefault(); // Evita la recarga del navegador
+        handleExecute();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleExecute]);
+
+  const openFile = async () => {
+    const blob = await fileOpen({
+      mimeTypes: ['image/*'],
+      extensions : ['.gtl']
+    });
+    const text = await blob.text();
+    setFileName(blob.name);
+    setCode(text);
   }
 
-  const openFile = () => {
-    console.log('open file');
-  }
-
-  const saveFile = () => {
-    console.log('save file');
+  const saveFile = async () => {
+    const blob = new Blob([code], { type: 'text/plain' });
+    await fileSave(blob, {
+      fileName: fileName || 'untitled.gtl',
+      extensions: ['.gtl']
+    });
+    
   }
 
   return (
@@ -35,9 +65,6 @@ const TextEditor = ({ code, setCode, handleExecute}: TextEditorProps) => {
         <MenubarMenu>
           <MenubarTrigger>File</MenubarTrigger>
           <MenubarContent>
-            <MenubarItem onClick={handleCreate}>
-              New File <MenubarShortcut>⌘T</MenubarShortcut>
-            </MenubarItem>
             <MenubarItem onClick={openFile}>
               Open File <MenubarShortcut>⌘O</MenubarShortcut>
             </MenubarItem>

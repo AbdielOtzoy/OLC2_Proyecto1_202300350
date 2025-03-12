@@ -9,7 +9,6 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
 
     public CompilerVisitor() {
         env = new Enviorment(null);
-        Embeded.Generate(env);
     }
 
     // VisitProgram
@@ -69,6 +68,7 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
                 "string" => new StringValueWrapper(""),
                 "bool" => new BoolValueWrapper(false),
                 "rune" => new RuneValueWrapper(' '),
+                "nil" => new NilValueWrapper(),
                 _ => throw new SemanticError("Invalid type", context.Start)
             };
             env.Declare(name, inferValue, context.Start);
@@ -85,6 +85,10 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         if(context.ID(2) == null) {
             // se trata de una declaración de función normal
             var foreign = new ForeignFunction(env, context);
+            if(context.ID(0).GetText() == "main") {
+                // ignore
+                return defaultValue;
+            }
             env.Declare(context.ID(0).GetText(), new FunctionValue(foreign, context.ID(0).GetText()), context.Start);
             return defaultValue;
         } else {
@@ -140,47 +144,60 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         return defaultValue;
     }
 
-   public override ValueWrapper VisitMatrixDeclaration(LanguageParser.MatrixDeclarationContext context)
-{
-    Console.WriteLine("MatrixDeclaration");
-
-    string name = context.ID().GetText();
-
-    // Verificar si la variable ya existe
-    if (env.Exists(name))
+    // VisitSlice
+    public override ValueWrapper VisitSlice(LanguageParser.SliceContext context)
     {
-        throw new SemanticError($"Variable {name} already declared", context.Start);
-    }
+        // '[]' TYPE '{' exprList? '}'                   # Slice
+        // exprList: expr (',' expr)*;
 
-    // Inicializar la matriz
-    List<ValueWrapper[]> rows = new List<ValueWrapper[]>();
+        // Crear un array con los valores
+        ValueWrapper[] values = new ValueWrapper[context.exprList()?.expr().Length ?? 0];
 
-    // Obtener el contexto de matrixRows
-    var matrixRowsContext = context.matrixRows();
-
-    // Recorrer los hijos de matrixRows
-    foreach (var child in matrixRowsContext.children)
-    {
-        // Verificar si el hijo es un exprList (una fila de la matriz)
-        if (child is LanguageParser.ExprListContext exprListContext)
+        // Llenar el array con los valores
+        if (context.exprList() != null)
         {
-            List<ValueWrapper> values = new List<ValueWrapper>();
-
-            // Recorrer las expresiones en exprList
-            foreach (var expr in exprListContext.expr())
+            for (int i = 0; i < context.exprList().expr().Length; i++)
             {
-                values.Add(Visit(expr));
+                values[i] = Visit(context.exprList().expr(i));
             }
-
-            // Agregar la fila a la matriz
-            rows.Add(values.ToArray());
         }
+
+        return new ArrayValueWrapper(values);
     }
 
-    // Declarar la variable en el entorno
-    env.Declare(name, new MatrixValueWrapper(rows.ToArray()), context.Start);
+   public override ValueWrapper VisitMatrixDeclaration(LanguageParser.MatrixDeclarationContext context)
+    {
+        Console.WriteLine("MatrixDeclaration");
 
-    return defaultValue;
+        string name = context.ID().GetText();
+
+        if (env.Exists(name))
+        {
+            throw new SemanticError($"Variable {name} already declared", context.Start);
+        }
+
+        List<ValueWrapper[]> rows = new List<ValueWrapper[]>();
+
+        var matrixRowsContext = context.matrixRows();
+
+        foreach (var child in matrixRowsContext.children)
+        {
+            if (child is LanguageParser.ExprListContext exprListContext)
+            {
+                List<ValueWrapper> values = new List<ValueWrapper>();
+
+                foreach (var expr in exprListContext.expr())
+                {
+                    values.Add(Visit(expr));
+                }
+
+                rows.Add(values.ToArray());
+            }
+        }
+
+        env.Declare(name, new MatrixValueWrapper(rows.ToArray()), context.Start);
+
+        return defaultValue;
 }
 
     // VisitStructDeclaration
@@ -215,20 +232,62 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         return defaultValue;
     }
 
-    // VisitPrintStmt
-    public override ValueWrapper VisitPrintStmt(LanguageParser.PrintStmtContext context)
+    private string ReplaceEscapeSequences(string input)
+{
+    return input
+        .Replace("\\n", "\n")  // Salto de línea
+        .Replace("\\t", "\t")  // Tabulación
+        .Replace("\\r", "\r")  // Retorno de carro
+        .Replace("\\\"", "\"") // Comilla doble
+        .Replace("\\'", "'")   // Comilla simple
+        .Replace("\\\\", "\\"); // Barra invertida
+}
+
+   public override ValueWrapper VisitPrintStmt(LanguageParser.PrintStmtContext context)
+{
+    // | 'fmt.Println' '(' exprList ')' # PrintStmt
+    // exprList: expr (',' expr)*;
+    foreach (var expr in context.exprList().expr())
     {
-        // | 'fmt.Println' '(' exprList ')' # PrintStmt
-        // exprList: expr (',' expr)*;
-        foreach (var expr in context.exprList().expr())
+        ValueWrapper value = Visit(expr);
+        if (value is ArrayValueWrapper)
         {
-            ValueWrapper value = Visit(expr);
-            if(value is ArrayValueWrapper) {
-                output += "[";
-                bool first = true;
-                foreach (var item in ((ArrayValueWrapper)value).Value)
+            output += "[";
+            bool first = true;
+            foreach (var item in ((ArrayValueWrapper)value).Value)
+            {
+                if (!first)
                 {
-                    if (!first)
+                    output += ",";
+                }
+                output += item switch
+                {
+                    IntValueWrapper intValue => intValue.Value.ToString(),
+                    FloatValueWrapper floatValue => floatValue.Value.ToString(),
+                    StringValueWrapper stringValue => ReplaceEscapeSequences(stringValue.Value), // Procesar secuencias de escape
+                    BoolValueWrapper boolValue => boolValue.Value.ToString(),
+                    RuneValueWrapper runeValue => runeValue.Value.ToString(),
+                    _ => throw new SemanticError("Invalid value", context.Start)
+                };
+                first = false;
+            }
+            output += "] ";
+        }
+        else if (value is MatrixValueWrapper)
+        {
+            output += "[";
+            bool first = true;
+            foreach (var row in ((MatrixValueWrapper)value).Value)
+            {
+                if (!first)
+                {
+                    output += ", \n";
+                }
+                output += "[";
+                bool firstRow = true;
+                foreach (var item in row)
+                {
+                    if (!firstRow)
                     {
                         output += ", ";
                     }
@@ -236,64 +295,51 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
                     {
                         IntValueWrapper intValue => intValue.Value.ToString(),
                         FloatValueWrapper floatValue => floatValue.Value.ToString(),
-                        StringValueWrapper stringValue => stringValue.Value,
+                        StringValueWrapper stringValue => ReplaceEscapeSequences(stringValue.Value), // Procesar secuencias de escape
                         BoolValueWrapper boolValue => boolValue.Value.ToString(),
                         RuneValueWrapper runeValue => runeValue.Value.ToString(),
                         _ => throw new SemanticError("Invalid value", context.Start)
                     };
-                    first = false;
+                    firstRow = false;
                 }
-                output += "] ";
+                output += "]";
+                first = false;
             }
-            if(value is MatrixValueWrapper){
-                output += "[";
-                bool first = true;
-                foreach (var row in ((MatrixValueWrapper)value).Value)
-                {
-                    if (!first)
-                    {
-                        output += ", ";
-                    }
-                    output += "[";
-                    bool firstRow = true;
-                    foreach (var item in row)
-                    {
-                        if (!firstRow)
-                        {
-                            output += ", ";
-                        }
-                        output += item switch
-                        {
-                            IntValueWrapper intValue => intValue.Value.ToString(),
-                            FloatValueWrapper floatValue => floatValue.Value.ToString(),
-                            StringValueWrapper stringValue => stringValue.Value,
-                            BoolValueWrapper boolValue => boolValue.Value.ToString(),
-                            RuneValueWrapper runeValue => runeValue.Value.ToString(),
-                            _ => throw new SemanticError("Invalid value", context.Start)
-                        };
-                        firstRow = false;
-                    }
-                    output += "]";
-                    first = false;
-                }
-                output += "] ";
-            }
-            output += value switch
-                {
-                    IntValueWrapper intValue => intValue.Value.ToString() + " ",
-                    ArrayValueWrapper arrayValue => " ", 
-                    MatrixValueWrapper matrixValue => " ",
-                    FloatValueWrapper floatValue => floatValue.Value.ToString() + " ",
-                    StringValueWrapper stringValue => stringValue.Value + " ",
-                    BoolValueWrapper boolValue => boolValue.Value.ToString() + " ",
-                    RuneValueWrapper runeValue => runeValue.Value.ToString() + " ",
-                    _ => throw new SemanticError("Invalid value", context.Start)
-                };
+            output += "] ";
         }
-        Console.WriteLine(output);
-        output += "\n"; 
-        return defaultValue;
+        else if (value is InstanceValue) {
+            output += "{";
+            foreach (var field in ((InstanceValue)value).Instance._fields)
+            {
+                output += field.Key + ": " + field.Value + ", ";
+            }
+            output += "} ";
+        }
+        else
+        {
+            output += value switch
+            {
+                IntValueWrapper intValue => intValue.Value.ToString() + " ",
+                ArrayValueWrapper arrayValue => " ",
+                MatrixValueWrapper matrixValue => " ",
+                InstanceValue instanceValue => " ",
+                FloatValueWrapper floatValue => floatValue.Value.ToString() + " ",
+                StringValueWrapper stringValue => ReplaceEscapeSequences(stringValue.Value) + " ", // Procesar secuencias de escape
+                BoolValueWrapper boolValue => boolValue.Value.ToString() + " ",
+                RuneValueWrapper runeValue => runeValue.Value.ToString() + " ",
+                NilValueWrapper nilValue => "nil ",
+                _ => throw new SemanticError("Invalid value", context.Start)
+            };
+        }
     }
+    // si viene vacio agregar un salto de linea
+    if(context.exprList().expr().Length == 0) {
+        output += "\n";
+    }
+    Console.WriteLine(output);
+    output += "\n";
+    return defaultValue;
+}
 
 
     // VisitBlockStmt
@@ -349,7 +395,14 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
                     caseMatched = true;
                     foreach (var declaration in caseClauseStmt.declaration())
                     {
-                        Visit(declaration);
+                        try
+                        {
+                            Visit(declaration);
+                        }
+                        catch (BreakException)
+                        {
+                            break;
+                        }
                     }
                     break; 
                 }
@@ -360,7 +413,14 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
                 {
                     foreach (var declaration in defaultContext.declaration())
                     {
-                        Visit(declaration);
+                        try
+                        {
+                            Visit(declaration);
+                        }
+                        catch (BreakException)
+                        {
+                            break;
+                        }
                     }
                 }
             }
@@ -394,8 +454,19 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
 
         while ((condition as BoolValueWrapper).Value)
         {
-            Visit(context.statement());
-            condition = Visit(context.expr());
+            try
+            {
+                Visit(context.statement());
+                condition = Visit(context.expr());
+            }
+            catch (BreakException)
+            {
+                break;
+            }
+            catch (ContinueException)
+            {
+                condition = Visit(context.expr());
+            }
         }
 
         return defaultValue;
@@ -416,6 +487,40 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         VisitForBody(context);
 
         env = prevEnv;
+        return defaultValue;
+    }
+
+    public override ValueWrapper VisitForRangeStmt(LanguageParser.ForRangeStmtContext context)
+    {
+        Console.WriteLine("ForRangeStmt");
+
+        // Obtener los nombres de las variables y el slice
+        string indexName = context.ID(0).GetText();
+        string valueName = context.ID(1).GetText();
+        string sliceName = context.ID(2).GetText();
+
+        ValueWrapper sliceValue = env.Get(sliceName, context.Start);
+
+        if (sliceValue is not ArrayValueWrapper arrayValue)
+        {
+            throw new SemanticError("Variable is not an array", context.Start);
+        }
+
+        for (int i = 0; i < arrayValue.Value.Length; i++)
+        {
+            Enviorment loopEnv = new Enviorment(env);
+
+            loopEnv.Declare(indexName, new IntValueWrapper(i), context.Start);
+            loopEnv.Declare(valueName, arrayValue.Value[i], context.Start);
+
+            Enviorment previousEnv = env;
+            env = loopEnv;
+
+            Visit(context.statement());
+
+            env = previousEnv;
+        }
+
         return defaultValue;
     }
 
@@ -546,7 +651,52 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             throw new SemanticError("Array index must be an integer", context.Start);
         }
 
-        return env.Get(name, intValue.Value, context.Start);
+        var array = env.Get(name, context.Start);
+
+        // ver si es de tipo array entonces devolver el valor en el indice
+        // si es matriz devolver la fila
+
+        if (array is ArrayValueWrapper arrayValue)
+        {
+            return arrayValue.Value[intValue.Value];
+        }
+        else if (array is MatrixValueWrapper matrixValue)
+        {
+            return new ArrayValueWrapper(matrixValue.Value[intValue.Value]);
+        }
+        else
+        {
+            throw new SemanticError("Variable is not an array", context.Start);
+        }
+    }
+
+    // VisitMatrixIndex
+    public override ValueWrapper VisitMatrixIndex(LanguageParser.MatrixIndexContext context)
+    {
+        string name = context.ID().GetText();
+        ValueWrapper row = Visit(context.expr(0));
+        ValueWrapper col = Visit(context.expr(1));
+
+        if (row is not IntValueWrapper rowValue)
+        {
+            throw new SemanticError("Row index must be an integer", context.Start);
+        }
+
+        if (col is not IntValueWrapper colValue)
+        {
+            throw new SemanticError("Column index must be an integer", context.Start);
+        }
+
+        var matrix = env.Get(name, context.Start);
+
+        if (matrix is MatrixValueWrapper matrixValue)
+        {
+            return matrixValue.Value[rowValue.Value][colValue.Value];
+        }
+        else
+        {
+            throw new SemanticError("Variable is not a matrix", context.Start);
+        }
     }
 
     // VisitIndexMethod
@@ -591,18 +741,26 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             if (slices is ArrayValueWrapper array)
             {
                 string result = "";
+                bool first = true;
                 foreach (var item in array.Value)
                 {
-                    if (item is StringValueWrapper stringWrapper)
+                    if (!first)
                     {
-                        result += stringWrapper.Value + stringValue.Value;
+                        result += stringValue.Value;
                     }
-                    else
+                    result += item switch
                     {
-                        throw new SemanticError("Invalid value in slice", context.Start);
-                    }
+                        IntValueWrapper intValue => intValue.Value.ToString(),
+                        FloatValueWrapper floatValue => floatValue.Value.ToString(),
+                        StringValueWrapper valuestring => valuestring.Value,
+                        BoolValueWrapper boolValue => boolValue.Value.ToString(),
+                        RuneValueWrapper runeValue => runeValue.Value.ToString(),
+                        _ => throw new SemanticError("Invalid value", context.Start)
+                    };
+                    first = false;
                 }
                 return new StringValueWrapper(result);
+
             }
             else
             {
@@ -618,16 +776,26 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     // VisitLenMethod
     public override ValueWrapper VisitLenMethod(LanguageParser.LenMethodContext context)
     {
-        string name = context.ID().GetText();
-        var slices = env.Get(name, context.Start);
-        if (slices is ArrayValueWrapper array)
+        // | 'len' '(' expr ')'                              # lenMethod
+
+        // si expr es un id, entonces retornar la longitud del slice
+        // si es el acceso a un índice de una matriz, retornar la longitud de la fila
+
+        ValueWrapper value = Visit(context.expr());
+
+        if (value is ArrayValueWrapper array)
         {
             return new IntValueWrapper(array.Value.Length);
         }
+        else if (value is MatrixValueWrapper matrix)
+        {
+            return new IntValueWrapper(matrix.Value.Length);
+        }
         else
         {
-            throw new SemanticError("Variable is not a slice", context.Start);
+            throw new SemanticError("Invalid value", context.Start);
         }
+        
     }
 
     // VisitAppendMethod
@@ -647,6 +815,21 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             newArray.Value[array.Value.Length] = value;
             env.Assign(name, newArray, context.Start);
             return newArray;
+        }
+        else if (slices is MatrixValueWrapper matrix)
+        {
+            // el value debe ser un array, agregarlo a la matriz y devolver la matriz
+            if (value is ArrayValueWrapper arrayValue)
+            {
+                List<ValueWrapper[]> newMatrix = new List<ValueWrapper[]>(matrix.Value);
+                newMatrix.Add(arrayValue.Value);
+                env.Assign(name, new MatrixValueWrapper(newMatrix.ToArray()), context.Start);
+                return new MatrixValueWrapper(newMatrix.ToArray());
+            }
+            else
+            {
+                throw new SemanticError("Value must be an array", context.Start);
+            }
         }
         else
         {
@@ -703,6 +886,24 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         string name = context.ID().GetText();
         ValueWrapper value = env.Get(name, context.Start);
 
+        if(value is ArrayValueWrapper) {
+            // []int, []float64, []string, []bool, []rune
+            switch((value as ArrayValueWrapper).Value[0]) {
+                case IntValueWrapper _:
+                    return new StringValueWrapper("[]int");
+                case FloatValueWrapper _:
+                    return new StringValueWrapper("[]float64");
+                case StringValueWrapper _:
+                    return new StringValueWrapper("[]string");
+                case BoolValueWrapper _:
+                    return new StringValueWrapper("[]bool");
+                case RuneValueWrapper _:
+                    return new StringValueWrapper("[]rune");
+                default:
+                    throw new SemanticError("Invalid type", context.Start);
+            }
+        }
+
         return new StringValueWrapper(value switch
         {
             IntValueWrapper => "int",
@@ -710,7 +911,8 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             StringValueWrapper => "string",
             BoolValueWrapper => "bool",
             RuneValueWrapper => "rune",
-            ArrayValueWrapper => "array",
+            NilValueWrapper => "nil",
+            ArrayValueWrapper => "",
             StructValue => "struct",
             _ => throw new SemanticError("Invalid value", context.Start)
         });
@@ -733,6 +935,12 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     public override ValueWrapper VisitBool(LanguageParser.BoolContext context)
     {
         return new BoolValueWrapper(bool.Parse(context.GetText()));
+    }
+
+    // VisitNil
+    public override ValueWrapper VisitNil(LanguageParser.NilContext context)
+    {
+        return new NilValueWrapper();
     }
 
 
@@ -926,6 +1134,27 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             }
             arrayValue.Value[i] = value;
             return defaultValue;
+        } else if (asignee is LanguageParser.MatrixIndexContext matrixIndexContext) {
+            string name = matrixIndexContext.ID().GetText();
+            ValueWrapper row = Visit(matrixIndexContext.expr(0));
+            ValueWrapper col = Visit(matrixIndexContext.expr(1));
+            if (row is not IntValueWrapper rowValue)
+            {
+                throw new SemanticError("Row index must be an integer", context.Start);
+            }
+            if (col is not IntValueWrapper colValue)
+            {
+                throw new SemanticError("Column index must be an integer", context.Start);
+            }
+            int i = rowValue.Value;
+            int j = colValue.Value;
+            ValueWrapper matrix = env.Get(name, context.Start);
+            if (matrix is not MatrixValueWrapper matrixValue)
+            {
+                throw new SemanticError("Variable is not a matrix", context.Start);
+            }
+            matrixValue.Value[i][j] = value;
+            return defaultValue;
         }
         else {
             throw new SemanticError("Invalid assignee", context.Start);
@@ -969,6 +1198,14 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
             (StringValueWrapper leftString, StringValueWrapper rightString, "!=") => new BoolValueWrapper(leftString.Value != rightString.Value),
             (RuneValueWrapper leftRune, RuneValueWrapper rightRune, "==") => new BoolValueWrapper(leftRune.Value == rightRune.Value),
             (RuneValueWrapper leftRune, RuneValueWrapper rightRune, "!=") => new BoolValueWrapper(leftRune.Value != rightRune.Value),
+            // Comparación con NilValueWrapper
+            (NilValueWrapper _, NilValueWrapper _, "==") => new BoolValueWrapper(true),
+            (NilValueWrapper _, NilValueWrapper _, "!=") => new BoolValueWrapper(false),
+            (NilValueWrapper _, _, "==") => new BoolValueWrapper(false),
+            (NilValueWrapper _, _, "!=") => new BoolValueWrapper(true),
+            (_, NilValueWrapper _, "==") => new BoolValueWrapper(false),
+            (_, NilValueWrapper _, "!=") => new BoolValueWrapper(true),
+
             _ => throw new SemanticError("Invalid operation", context.Start)
         };
     }

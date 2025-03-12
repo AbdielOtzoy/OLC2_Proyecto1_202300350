@@ -38,37 +38,6 @@ public class Enviorment
         return false;
     }
 
-    // obtener indice de un arreglo
-    public ValueWrapper Get(string name, int index, Antlr4.Runtime.IToken token)
-    {
-        if (variables.ContainsKey(name))
-        {
-            if (variables[name] is ArrayValueWrapper array)
-            {
-                if (index >= 0 && index < array.Value.Length)
-                {
-                    return array.Value[index];
-                }
-                else
-                {
-                    throw new SemanticError($"Index out of bounds", token);
-                }
-            }
-            else
-            {
-                throw new SemanticError($"Variable {name} is not an array", token);
-            }
-        }
-        else if (parent != null)
-        {
-            return parent.Get(name, index, token);
-        }
-        else
-        {
-            throw new SemanticError($"Variable {name} not found", token);
-        }
-    }
-
     public void Declare(string name, ValueWrapper value,  Antlr4.Runtime.IToken token)
     {
         if (variables.ContainsKey(name))
