@@ -6,6 +6,10 @@ using Antlr4.Runtime;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Antlr4.Runtime.Misc;
+// json
+using System.Text.Json;
+using System.Net.Http;
+using System.Text;
 
 namespace api.Controllers
 {
@@ -70,8 +74,9 @@ namespace api.Controllers
                 var visitor = new CompilerVisitor();
                 visitor.Visit(tree);
                 visitor.ExecuteMain(tree);
+                var symbolsTable = visitor.getJSONSymbols();
 
-                return Ok(new { result = visitor.output});
+                return Ok(new { result = visitor.output , symbols = symbolsTable });
             }
             catch (ParseCanceledException e)
             {
@@ -89,6 +94,75 @@ namespace api.Controllers
                 return BadRequest( new { message = e.Message });
             }
 
+        }
+
+        [HttpPost("ast")]
+        public async Task<IActionResult> GetAST([FromBody] CompileRequest request)
+        {
+            if(!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            string grammarPath = Path.Combine(Directory.GetCurrentDirectory(), "grammars", "Language.g4");
+
+            var grammar = "";
+            
+            try
+            {
+                if(System.IO.File.Exists(grammarPath))
+                {
+                    grammar = System.IO.File.ReadAllText(grammarPath);
+                }
+                else
+                {
+                    return BadRequest(new { message = "Grammar file not found" });
+                }
+            }
+            catch (System.Exception)
+            {
+                
+                return BadRequest(new { message = "Error reading grammar file" });
+            }
+
+            var payload = new
+            {
+                grammar,
+                lexgrammar = "",
+                input = request.Code,
+                start = "program"
+            };
+
+            var jsonPayload = JsonSerializer.Serialize(payload);
+            var context = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+            using( var client = new HttpClient()){
+                try
+                {
+                    HttpResponseMessage response = await client.PostAsync("http://lab.antlr.org/parse/", context);
+                    response.EnsureSuccessStatusCode();
+
+                    string result = await response.Content.ReadAsStringAsync();
+
+                    using var doc = JsonDocument.Parse(result);
+                    var root = doc.RootElement;
+
+                    if(root.TryGetProperty("result", out JsonElement resultElement) &&  
+                        resultElement.TryGetProperty("svgtree", out JsonElement svgtreeElement))
+                        {
+                            string svgtree = svgtreeElement.GetString() ?? string.Empty;
+                            return Ok(new { svgtree });
+                        }
+
+                    return BadRequest(new { message = "Error parsing AST" });
+                }
+                catch (System.Exception ex)
+                {
+                    
+                    _logger.LogError("Error parsing AST", ex);
+                    return BadRequest(new { message = "Error parsing AST" });
+                }
+            }
         }
     }
 }

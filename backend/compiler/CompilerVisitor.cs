@@ -6,9 +6,28 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
     public ValueWrapper defaultValue = new VoidBody();
     public string output = "";
     public Enviorment env;
+    public List<Symbol> symbols = new List<Symbol>(); // table of symbols
 
     public CompilerVisitor() {
         env = new Enviorment(null);
+    }
+
+    public string getJSONSymbols() {
+        string json = "[";
+        foreach (var symbol in symbols)
+        {
+            json += "{";
+            json += $"\"id\": \"{symbol.id}\",";
+            json += $"\"type\": \"{symbol.type}\",";
+            json += $"\"kind\": \"{symbol.kind}\",";
+            json += $"\"line\": \"{symbol.token.Line}\",";
+            json += $"\"column\": \"{symbol.token.Column}\"";
+            json += "},";
+        }
+        json = json.Remove(json.Length - 1);
+        json += "]";
+
+        return json;
     }
 
     // VisitProgram
@@ -72,10 +91,25 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
                 _ => throw new SemanticError("Invalid type", context.Start)
             };
             env.Declare(name, inferValue, context.Start);
+            symbols.Add(new Symbol(name, context.TYPE().GetText(), "variable", context.Start));
             return defaultValue;
         } 
         ValueWrapper value = Visit(context.expr());
         env.Declare(name, value, context.Start);
+        string type_var = value switch
+        {
+            IntValueWrapper => "int",
+            FloatValueWrapper => "float64",
+            StringValueWrapper => "string",
+            BoolValueWrapper => "bool",
+            RuneValueWrapper => "rune",
+            NilValueWrapper => "nil",
+            ArrayValueWrapper => "[]int",
+            MatrixValueWrapper => "[][]int",
+            StructValue => "struct",
+            _ => "unknown"
+        };
+        symbols.Add(new Symbol(name, type_var, "variable", context.Start));
         return defaultValue;
     }
 
@@ -90,6 +124,13 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
                 return defaultValue;
             }
             env.Declare(context.ID(0).GetText(), new FunctionValue(foreign, context.ID(0).GetText()), context.Start);
+            string type_func;
+            if(context.TYPE() != null) {
+                type_func = context.TYPE().GetText();
+            } else {
+                type_func = "void";
+            }
+            symbols.Add(new Symbol(context.ID(0).GetText(), type_func, "function", context.Start));
             return defaultValue;
         } else {
             // se declara una función asociada a un struct
@@ -140,6 +181,7 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
 
         // Declarar la variable en el entorno
         env.Declare(name, new ArrayValueWrapper(values), context.Start);
+        symbols.Add(new Symbol(name, "[]int", "slice", context.Start));
 
         return defaultValue;
     }
@@ -196,6 +238,7 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         }
 
         env.Declare(name, new MatrixValueWrapper(rows.ToArray()), context.Start);
+        symbols.Add(new Symbol(name, "[][]int", "slice", context.Start));
 
         return defaultValue;
 }
@@ -220,6 +263,7 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
         Console.WriteLine("Struct: " + newStruct.Name);
 
         env.Declare(context.ID().GetText(), new StructValue(newStruct), context.Start);
+        symbols.Add(new Symbol(context.ID().GetText(), "struct", "variable", context.Start));
 
         return defaultValue;
     }

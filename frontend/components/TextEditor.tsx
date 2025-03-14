@@ -11,6 +11,7 @@ import {
   MenubarTrigger,
 } from "@/components/ui/menubar"
 
+
 import {
   fileOpen,
   fileSave,
@@ -22,7 +23,7 @@ interface TextEditorProps {
   handleExecute: () => void;
 }
 
-const TextEditor = ({ code, setCode, handleExecute}: TextEditorProps) => {
+const TextEditor = ({ code, setCode, handleExecute }: TextEditorProps) => {
   const [fileName, setFileName] = useState('');
 
   useEffect(() => {
