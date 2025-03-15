@@ -702,6 +702,11 @@ public class CompilerVisitor : LanguageBaseVisitor<ValueWrapper>
 
         if (array is ArrayValueWrapper arrayValue)
         {
+            // ver si el indice esta dentro del rango
+            if (intValue.Value < 0 || intValue.Value >= arrayValue.Value.Length)
+            {
+                throw new SemanticError("Index out of range", context.Start);
+            }
             return arrayValue.Value[intValue.Value];
         }
         else if (array is MatrixValueWrapper matrixValue)

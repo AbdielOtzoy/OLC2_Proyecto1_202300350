@@ -52,8 +52,14 @@ public class Enviorment
     {
         if (variables.ContainsKey(name))
         {
+            string valueType = variables[name].GetType().ToString();
+            string valueToAssignType = value.GetType().ToString();
+            if (valueType != valueToAssignType)
+            {
+                throw new SemanticError($"Cannot assign {valueToAssignType} to {valueType}", token);
+            }
             variables[name] = value;
-            return value;
+            return value;  
         }
         else if (parent != null)
         {
